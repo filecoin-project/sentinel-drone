@@ -34,8 +34,12 @@ all:
 deps:
 	go mod download
 
+.PHONY: ffi
+ffi:
+	(cd ./plugins/inputs/lotus/externs/filecoin-ffi && make)
+
 .PHONY: telegraf
-telegraf:
+telegraf: ffi
 	go build -ldflags "$(LDFLAGS)" ./cmd/telegraf
 
 .PHONY: go-install

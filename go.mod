@@ -16,7 +16,7 @@ require (
 	github.com/Microsoft/ApplicationInsights-Go v0.4.2
 	github.com/Microsoft/go-winio v0.4.9 // indirect
 	github.com/Shopify/sarama v1.24.1
-	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6
+	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 	github.com/aerospike/aerospike-client-go v1.27.0
 	github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
 	github.com/amir/raidman v0.0.0-20170415203553-1ccc43bfb9c9
@@ -39,28 +39,28 @@ require (
 	github.com/docker/distribution v2.6.0-rc.1.0.20170726174610-edc3ab29cdff+incompatible // indirect
 	github.com/docker/docker v1.4.2-0.20180327123150-ed7b6428c133
 	github.com/docker/go-connections v0.3.0 // indirect
-	github.com/docker/go-units v0.3.3 // indirect
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20181012153825-d7b61745d166
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/ericchiang/k8s v1.2.0
+	github.com/filecoin-project/lotus v0.2.11-0.20200429011108-559b5e788523
+	github.com/filecoin-project/specs-actors v1.0.0
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/glinton/ping v0.1.4-0.20200311211934-5ac87da8cd96
-	github.com/go-logfmt/logfmt v0.4.0
-	github.com/go-ole/go-ole v1.2.1 // indirect
+	github.com/go-logfmt/logfmt v0.5.0
 	github.com/go-redis/redis v6.12.0+incompatible
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/goburrow/modbus v0.1.0
 	github.com/goburrow/serial v0.1.0 // indirect
 	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v2.1.0+incompatible
-	github.com/gogo/protobuf v1.2.2-0.20190723190241-65acae22fc9d
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/geo v0.0.0-20190916061304-5b978397cfec
 	github.com/golang/mock v1.4.3 // indirect
 	github.com/golang/protobuf v1.3.5
 	github.com/google/go-cmp v0.4.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
-	github.com/gorilla/mux v1.6.2
+	github.com/gorilla/mux v1.7.4
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/harlow/kinesis-consumer v0.3.1-0.20181230152818-2f58b136fee0
@@ -73,6 +73,8 @@ require (
 	github.com/influxdata/tail v1.0.1-0.20180327235535-c43482518d41
 	github.com/influxdata/toml v0.0.0-20190415235208-270119a8ce65
 	github.com/influxdata/wlog v0.0.0-20160411224016-7c63b0a71ef8
+	github.com/ipfs/go-cid v0.0.5
+	github.com/ipfs/go-log/v2 v2.0.5
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.6.0+incompatible
 	github.com/jcmturner/gofork v1.0.0 // indirect
@@ -84,11 +86,12 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353 // indirect
 	github.com/lib/pq v1.3.0 // indirect
-	github.com/mailru/easyjson v0.0.0-20180717111219-efc7eb8984d6 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1
 	github.com/mdlayher/apcupsd v0.0.0-20190314144147-eb3dd99a75fe
-	github.com/miekg/dns v1.0.14
+	github.com/miekg/dns v1.1.28
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
+	github.com/multiformats/go-multiaddr-net v0.1.5
+	github.com/multiformats/go-multihash v0.0.13
 	github.com/multiplay/go-ts3 v1.0.0
 	github.com/naoina/go-stringutil v0.1.0 // indirect
 	github.com/nats-io/nats-server/v2 v2.1.4
@@ -98,7 +101,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opentracing-contrib/go-observer v0.0.0-20170622124052-a52f23424492 // indirect
-	github.com/opentracing/opentracing-go v1.0.2 // indirect
 	github.com/openzipkin/zipkin-go-opentracing v0.3.4
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.5.1
@@ -125,16 +127,15 @@ require (
 	github.com/wvanbergen/kazoo-go v0.0.0-20180202103751-f72d8611297a // indirect
 	github.com/yuin/gopher-lua v0.0.0-20180630135845-46796da1b0b4 // indirect
 	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6 // indirect
-	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20200301022130-244492dfa37a
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a // indirect
-	golang.org/x/sys v0.0.0-20200212091648-12a6c2dcc1e4
-	golang.org/x/tools v0.0.0-20200317043434-63da46f3035e // indirect
+	golang.org/x/sys v0.0.0-20200409092240-59c9f1ba88fa
+	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20200205215550-e35592f146e4
 	gonum.org/v1/gonum v0.6.2 // indirect
 	google.golang.org/api v0.20.0
-	google.golang.org/genproto v0.0.0-20200317114155-1f3552e48f24
+	google.golang.org/genproto v0.0.0-20200406120821-33397c535dc2
 	google.golang.org/grpc v1.28.0
 	gopkg.in/fatih/pool.v2 v2.0.0 // indirect
 	gopkg.in/gorethink/gorethink.v3 v3.0.5
@@ -142,11 +143,12 @@ require (
 	gopkg.in/ldap.v3 v3.1.0
 	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce
 	gopkg.in/olivere/elastic.v5 v5.0.70
-	gopkg.in/yaml.v2 v2.2.5
-	gotest.tools v2.2.0+incompatible // indirect
-	honnef.co/go/tools v0.0.1-2020.1.3 // indirect
+	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/apimachinery v0.17.1 // indirect
 )
 
 // replaced due to https://github.com/satori/go.uuid/issues/73
 replace github.com/satori/go.uuid => github.com/gofrs/uuid v3.2.0+incompatible
+
+// provides non-go artifacts for build since go-mod doesn't understand anything unless it has .go at the end
+replace github.com/filecoin-project/filecoin-ffi => ./plugins/inputs/lotus/externs/filecoin-ffi
