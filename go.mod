@@ -152,4 +152,4 @@ require (
 replace github.com/satori/go.uuid => github.com/gofrs/uuid v3.2.0+incompatible
 
 // provides non-go artifacts for build since go-mod doesn't understand anything unless it has .go at the end
-replace github.com/filecoin-project/filecoin-ffi => ./plugins/inputs/lotus/externs/filecoin-ffi
+replace github.com/filecoin-project/filecoin-ffi => ./plugins/inputs/lotus/extern/filecoin-ffi

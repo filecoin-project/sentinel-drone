@@ -7,6 +7,7 @@ else
 	VERSION := $(shell git describe --exact-match --tags 2>/dev/null)
 endif
 
+MODULES :=
 PREFIX := /usr/local
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT := $(shell git rev-parse --short HEAD)
@@ -25,21 +26,44 @@ ifdef VERSION
 	LDFLAGS += -X main.version=$(VERSION)
 endif
 
+## FFI
+
+FFI_PATH:=plugins/inputs/lotus/extern/filecoin-ffi/
+FFI_DEPS:=.install-filcrypto
+FFI_DEPS:=$(addprefix $(FFI_PATH),$(FFI_DEPS))
+
+$(FFI_DEPS): .update-telegraf-deps ;
+BUILD_DEPS+=.update-telegraf-deps
+CLEAN+=.update-telegraf-deps
+
+.update-telegraf-deps: $(FFI_PATH)
+	$(MAKE) -C $(FFI_PATH) $(FFI_DEPS:$(FFI_PATH)%=%)
+	@touch $@
+
+MODULES+=$(FFI_PATH)
+
+$(MODULES): .update-modules ;
+
+# dummy file that marks the last time modules were updated
+.update-modules:
+	git submodule update --init --recursive
+	touch $@
+
+CLEAN+=.update-modules
+
+# end git modules
+
 .PHONY: all
 all:
 	@$(MAKE) --no-print-directory deps
 	@$(MAKE) --no-print-directory telegraf
 
 .PHONY: deps
-deps:
+deps: $(BUILD_DEPS)
 	go mod download
 
-.PHONY: ffi
-ffi:
-	(cd ./plugins/inputs/lotus/externs/filecoin-ffi && make)
-
 .PHONY: telegraf
-telegraf: ffi
+telegraf: deps
 	go build -ldflags "$(LDFLAGS)" ./cmd/telegraf
 
 .PHONY: go-install
@@ -126,6 +150,8 @@ package-nightly:
 clean:
 	rm -f telegraf
 	rm -f telegraf.exe
+	rm -rf $(CLEAN)
+	-$(MAKE) -C $(FFI_PATH) clean
 
 .PHONY: docker-image
 docker-image:

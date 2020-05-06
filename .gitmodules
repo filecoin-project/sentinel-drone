@@ -1,3 +1,6 @@
 [submodule "plugins/inputs/lotus/externs/filecoin-ffi"]
 	path = plugins/inputs/lotus/externs/filecoin-ffi
 	url = https://github.com/filecoin-project/filecoin-ffi
+[submodule "plugins/inputs/lotus/extern/filecoin-ffi"]
+	path = plugins/inputs/lotus/extern/filecoin-ffi
+	url = https://github.com/filecoin-project/filecoin-ffi
