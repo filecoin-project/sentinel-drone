@@ -22,7 +22,6 @@ import (
 )
 
 type lotus struct {
-	Auth_token string `toml:"auth_token"`
 	Lotus_data string `toml:"lotus_data"`
 
 	lastHeight int
@@ -39,10 +38,6 @@ func (l *lotus) Description() string {
 }
 
 const sampleConfig = `
-  ## Provide the authentication token from Lotus to be used when accessing
-  ## the JSON RPC api.
-  auth_token = ""
-
   ## Provide the Lotus working path.
   lotus_data = "${HOME}/.lotus"
 `

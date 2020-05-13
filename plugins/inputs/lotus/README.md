@@ -10,16 +10,11 @@ generate it using `telegraf --usage lotus`.
 
 ```toml
 [[inputs.lotus]]
-  example_option = "example_value"
+  ## Provide the Lotus working path.
+  lotus_data = "${HOME}/.lotus"
 ```
 
-#### example_option
-
-A more in depth description of an option can be provided here, but only do so
-if the option cannot be fully described in the sample config.
-
-
-### Metrics
+### Metrics (TODO)
 Here you should add an optional description and links to where the user can
 get more information about the measurements.
 
@@ -41,7 +36,7 @@ mapped to the output.
   - fields:
     - field3 (integer, bytes)
 
-### Sample Queries
+### Sample Queries (TODO)
 
 This section can contain some useful InfluxDB queries that can be used to get
 started with the plugin or to generate dashboards.  For each query listed,
@@ -52,12 +47,12 @@ Get the max, mean, and min for the measurement in the last hour:
 SELECT max(field1), mean(field1), min(field1) FROM measurement1 WHERE tag1=bar AND time > now() - 1h GROUP BY tag
 ```
 
-### Troubleshooting
+### Troubleshooting (TODO)
 
 This optional section can provide basic troubleshooting steps that a user can
 perform.
 
-### Example Output
+### Example Output (TODO)
 
 This section shows example output in Line Protocol format.  You can often use
 `telegraf --input-filter <plugin-name> --test` or use the `file` output to get
