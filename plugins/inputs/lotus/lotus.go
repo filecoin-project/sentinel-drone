@@ -97,31 +97,23 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 func (l *lotus) Start(acc telegraf.Accumulator) error {
 	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig()
 	if err != nil {
-		acc.AddError(err)
-		log.Println(err)
 		return err
 	}
 	l.api = nodeAPI
 
 	if err := l.inflateState(); err != nil {
-		acc.AddError(err)
-		log.Println(err)
 		return err
 	}
 
 	ctx, closeTipsChan := context.WithCancel(context.Background())
 	tipsetsCh, err := internal.GetTips(ctx, l.api, abi.ChainEpoch(0), 3)
 	if err != nil {
-		acc.AddError(err)
-		log.Println(err)
 		return err
 	}
 
 	ctx, closeBlocksChan := context.WithCancel(context.Background())
 	headCh, err := l.api.SyncIncomingBlocks(ctx)
 	if err != nil {
-		acc.AddError(err)
-		log.Println(err)
 		return err
 	}
 
