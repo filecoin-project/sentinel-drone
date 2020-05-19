@@ -22,9 +22,12 @@ import (
 )
 
 type lotus struct {
-	Lotus_data string `toml:"lotus_data"`
+	Lotus_data   string `toml:"lotus_datapath"`
+	Lotus_listen string `toml:"lotus_api_multiaddr"`
+	Lotus_token  string `toml:"lotus_api_token"`
 
 	lastHeight int
+	api        api.FullNode
 	shutdown   func()
 }
 
@@ -34,12 +37,25 @@ func newLotus() *lotus {
 
 // Description will appear directly above the plugin definition in the config file
 func (l *lotus) Description() string {
-	return `Capture telemetry produced by a local instance of Lotus`
+	return `Capture network metrics from Filecoin Lotus`
 }
 
 const sampleConfig = `
-  ## Provide the Lotus working path.
-  lotus_data = "${HOME}/.lotus"
+	## Provide the multiaddr that the lotus API is listening on. If API multiaddr is empty,
+	## telegraf will check lotus_datapath for values. Default: "/ip4/0.0.0.0/tcp/1347"
+	# lotus_api_multiaddr = "/ip4/0.0.0.0/tcp/1347"
+
+	## Provide the token that telegraf can use to access the lotus API. The token only requires
+	## "read" privileges. This is useful for restricting metrics to a seperate token.
+	## Default: ""
+	# lotus_api_token = ""
+
+  ## Provide the Lotus working path. The input plugin will scan the path contents
+	## for the correct listening address/port and API token. Note: Path must be readable
+	## by the telegraf process otherwise, the value should be manually set in api_listen_addr
+	## and api_token. This value is ignored if lotus_api_* values are populated.
+	## Default: $HOME/.lotus
+  lotus_datapath = "${HOME}/.lotus"
 `
 
 // SampleConfig will populate the sample configuration portion of the plugin's configuration
@@ -52,14 +68,40 @@ func (l *lotus) Gather(acc telegraf.Accumulator) error {
 	return nil
 }
 
+func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
+	var (
+		nodeAPI    api.FullNode
+		nodeCloser func()
+	)
+	if len(l.Lotus_listen) > 0 && len(l.Lotus_token) > 0 {
+		api, apiCloser, err := internal.GetFullNodeAPIUsingCredentials(l.Lotus_listen, l.Lotus_token)
+		if err != nil {
+			err = fmt.Errorf("connect with credentials: %v", err)
+			return nil, nil, err
+		}
+		nodeAPI = api
+		nodeCloser = apiCloser
+	} else {
+		api, apiCloser, err := internal.GetFullNodeAPI(l.Lotus_data)
+		if err != nil {
+			err = fmt.Errorf("connect from lotus state: %v", err)
+			return nil, nil, err
+		}
+		nodeAPI = api
+		nodeCloser = apiCloser
+	}
+	return nodeAPI, nodeCloser, nil
+}
+
 // Start begins walking through the chain to update the datastore
 func (l *lotus) Start(acc telegraf.Accumulator) error {
-	api, apiCloser, err := internal.GetFullNodeAPI(l.Lotus_data)
+	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig()
 	if err != nil {
 		acc.AddError(err)
 		log.Println(err)
 		return err
 	}
+	l.api = nodeAPI
 
 	if err := l.inflateState(); err != nil {
 		acc.AddError(err)
@@ -68,7 +110,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	}
 
 	ctx, closeTipsChan := context.WithCancel(context.Background())
-	tipsetsCh, err := internal.GetTips(ctx, api, abi.ChainEpoch(0), 3)
+	tipsetsCh, err := internal.GetTips(ctx, l.api, abi.ChainEpoch(0), 3)
 	if err != nil {
 		acc.AddError(err)
 		log.Println(err)
@@ -76,7 +118,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	}
 
 	ctx, closeBlocksChan := context.WithCancel(context.Background())
-	headCh, err := api.SyncIncomingBlocks(ctx)
+	headCh, err := l.api.SyncIncomingBlocks(ctx)
 	if err != nil {
 		acc.AddError(err)
 		log.Println(err)
@@ -86,7 +128,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 	l.shutdown = func() {
-		apiCloser()
+		nodeCloser()
 		closeTipsChan()
 		closeBlocksChan()
 		wg.Wait()
@@ -103,7 +145,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		for range throttle.C {
 			select {
 			case t := <-tipsetsCh:
-				go processTipset(ctx, api, acc, t, time.Now())
+				go processTipset(ctx, l.api, acc, t, time.Now())
 				l.lastHeight = int(t.Height())
 			case <-ctx.Done():
 				return

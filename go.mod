@@ -91,6 +91,7 @@ require (
 	github.com/mdlayher/apcupsd v0.0.0-20190314144147-eb3dd99a75fe
 	github.com/miekg/dns v1.1.28
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
+	github.com/multiformats/go-multiaddr v0.2.1
 	github.com/multiformats/go-multiaddr-net v0.1.5
 	github.com/multiformats/go-multihash v0.0.13
 	github.com/multiplay/go-ts3 v1.0.0

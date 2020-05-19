@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/filecoin-project/specs-actors/actors/abi"
+	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 
 	"golang.org/x/xerrors"
@@ -22,32 +23,6 @@ import (
 )
 
 var log = logging.Logger("stats")
-
-func getAPI(path string) (string, http.Header, error) {
-	r, err := repo.NewFS(path)
-	if err != nil {
-		return "", nil, err
-	}
-
-	ma, err := r.APIEndpoint()
-	if err != nil {
-		return "", nil, xerrors.Errorf("failed to get api endpoint: %w", err)
-	}
-	_, addr, err := manet.DialArgs(ma)
-	if err != nil {
-		return "", nil, err
-	}
-	var headers http.Header
-	token, err := r.APIToken()
-	if err != nil {
-		log.Warnw("Couldn't load CLI token, capabilities may be limited", "error", err)
-	} else {
-		headers = http.Header{}
-		headers.Add("Authorization", "Bearer "+string(token))
-	}
-
-	return "ws://" + addr + "/rpc/v0", headers, nil
-}
 
 func WaitForSyncComplete(ctx context.Context, napi api.FullNode) error {
 sync_complete:
@@ -217,6 +192,20 @@ func loadTipsets(ctx context.Context, api api.FullNode, curr *types.TipSet, lowe
 	return tipsets, nil
 }
 
+func GetFullNodeAPIUsingCredentials(listenAddr, token string) (api.FullNode, jsonrpc.ClientCloser, error) {
+	parsedAddr, err := ma.NewMultiaddr(listenAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	_, addr, err := manet.DialArgs(parsedAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return client.NewFullNodeRPC(apiURI(addr), apiHeaders(token))
+}
+
 func GetFullNodeAPI(repo string) (api.FullNode, jsonrpc.ClientCloser, error) {
 	addr, headers, err := getAPI(repo)
 	if err != nil {
@@ -224,4 +213,39 @@ func GetFullNodeAPI(repo string) (api.FullNode, jsonrpc.ClientCloser, error) {
 	}
 
 	return client.NewFullNodeRPC(addr, headers)
+}
+
+func getAPI(path string) (string, http.Header, error) {
+	r, err := repo.NewFS(path)
+	if err != nil {
+		return "", nil, err
+	}
+
+	ma, err := r.APIEndpoint()
+	if err != nil {
+		return "", nil, xerrors.Errorf("failed to get api endpoint: %w", err)
+	}
+	_, addr, err := manet.DialArgs(ma)
+	if err != nil {
+		return "", nil, err
+	}
+	var headers http.Header
+	token, err := r.APIToken()
+	if err != nil {
+		log.Warnw("Couldn't load CLI token, capabilities may be limited", "error", err)
+	} else {
+		headers = apiHeaders(string(token))
+	}
+
+	return apiURI(addr), headers, nil
+}
+
+func apiURI(addr string) string {
+	return "ws://" + addr + "/rpc/v0"
+}
+
+func apiHeaders(token string) http.Header {
+	headers := http.Header{}
+	headers.Add("Authorization", "Bearer "+token)
+	return headers
 }
