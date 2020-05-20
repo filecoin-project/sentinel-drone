@@ -21,18 +21,38 @@ import (
 	"github.com/multiformats/go-multihash"
 )
 
-type lotus struct {
-	Lotus_data   string `toml:"lotus_datapath"`
-	Lotus_listen string `toml:"lotus_api_multiaddr"`
-	Lotus_token  string `toml:"lotus_api_token"`
+const (
+	DefaultConfig_DataPath          = "${HOME}/.lotus"
+	DefaultConfig_APIListenAddr     = "/ip4/0.0.0.0/tcp/1234"
+	DefaultConfig_ChainWalkThrottle = "1s"
+)
 
-	lastHeight int
-	api        api.FullNode
-	shutdown   func()
+type lotus struct {
+	Config_DataPath          string `toml:"lotus_datapath"`
+	Config_APIListenAddr     string `toml:"lotus_api_multiaddr"`
+	Config_APIToken          string `toml:"lotus_api_token"`
+	Config_ChainWalkThrottle string `toml:"chain_walk_throttle"`
+
+	api               api.FullNode
+	lastHeight        int
+	chainWalkThrottle time.Duration
+	shutdown          func()
 }
 
 func newLotus() *lotus {
 	return &lotus{}
+}
+
+func (l *lotus) setDefaults() {
+	if len(l.Config_DataPath) == 0 {
+		l.Config_DataPath = DefaultConfig_DataPath
+	}
+	if len(l.Config_APIListenAddr) == 0 {
+		l.Config_APIListenAddr = DefaultConfig_APIListenAddr
+	}
+	if len(l.Config_ChainWalkThrottle) == 0 {
+		l.Config_ChainWalkThrottle = DefaultConfig_ChainWalkThrottle
+	}
 }
 
 // Description will appear directly above the plugin definition in the config file
@@ -40,23 +60,28 @@ func (l *lotus) Description() string {
 	return `Capture network metrics from Filecoin Lotus`
 }
 
-const sampleConfig = `
+var sampleConfig = fmt.Sprintf(`
 	## Provide the multiaddr that the lotus API is listening on. If API multiaddr is empty,
-	## telegraf will check lotus_datapath for values. Default: "/ip4/0.0.0.0/tcp/1347"
-	# lotus_api_multiaddr = "/ip4/0.0.0.0/tcp/1347"
+	## telegraf will check lotus_datapath for values. Default: "%[1]s"
+	# lotus_api_multiaddr = "%[1]s"
 
 	## Provide the token that telegraf can use to access the lotus API. The token only requires
 	## "read" privileges. This is useful for restricting metrics to a seperate token.
-	## Default: ""
 	# lotus_api_token = ""
 
-  ## Provide the Lotus working path. The input plugin will scan the path contents
+	## Provide the Lotus working path. The input plugin will scan the path contents
 	## for the correct listening address/port and API token. Note: Path must be readable
 	## by the telegraf process otherwise, the value should be manually set in api_listen_addr
 	## and api_token. This value is ignored if lotus_api_* values are populated.
-	## Default: $HOME/.lotus
-  lotus_datapath = "${HOME}/.lotus"
-`
+	## Default: "%[2]s"
+	lotus_datapath = "%[2]s"
+
+	## Set the shortest duration between the processing of each tipset state. Valid time units
+	## are "ns", "us" (or "µs"), "ms", "s", "m", "h". When telegraf starts collecting metrics,
+	## it will also begin walking over the entire chain to update past state changes for the
+	## dashboard. This setting prevents that walk from going too quickly. Default: "%[3]s"
+	chain_walk_throttle = "%[3]s"
+`, DefaultConfig_DataPath, DefaultConfig_APIListenAddr, DefaultConfig_ChainWalkThrottle)
 
 // SampleConfig will populate the sample configuration portion of the plugin's configuration
 func (l *lotus) SampleConfig() string {
@@ -73,8 +98,8 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 		nodeAPI    api.FullNode
 		nodeCloser func()
 	)
-	if len(l.Lotus_listen) > 0 && len(l.Lotus_token) > 0 {
-		api, apiCloser, err := internal.GetFullNodeAPIUsingCredentials(l.Lotus_listen, l.Lotus_token)
+	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
+		api, apiCloser, err := internal.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
 			err = fmt.Errorf("connect with credentials: %v", err)
 			return nil, nil, err
@@ -82,7 +107,7 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 		nodeAPI = api
 		nodeCloser = apiCloser
 	} else {
-		api, apiCloser, err := internal.GetFullNodeAPI(l.Lotus_data)
+		api, apiCloser, err := internal.GetFullNodeAPI(l.Config_DataPath)
 		if err != nil {
 			err = fmt.Errorf("connect from lotus state: %v", err)
 			return nil, nil, err
@@ -95,6 +120,14 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 
 // Start begins walking through the chain to update the datastore
 func (l *lotus) Start(acc telegraf.Accumulator) error {
+	l.setDefaults()
+
+	throttleDuration, err := time.ParseDuration(l.Config_ChainWalkThrottle)
+	if err != nil {
+		return err
+	}
+	l.chainWalkThrottle = throttleDuration
+
 	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig()
 	if err != nil {
 		return err
@@ -131,7 +164,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	processTipsets := func() {
 		defer wg.Done()
 
-		throttle := time.NewTicker(100 * time.Millisecond)
+		throttle := time.NewTicker(l.chainWalkThrottle)
 		defer throttle.Stop()
 
 		for range throttle.C {

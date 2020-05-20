@@ -14,7 +14,7 @@ type lotusState struct {
 const stateFilename = "state.json"
 
 func (l *lotus) statePath(inclFilename bool) string {
-	statePath := l.Lotus_data + "-telegraf"
+	statePath := l.Config_DataPath + "-telegraf"
 	if inclFilename {
 		return filepath.Join(statePath, stateFilename)
 	}
