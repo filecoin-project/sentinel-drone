@@ -10,8 +10,26 @@ generate it using `telegraf --usage lotus`.
 
 ```toml
 [[inputs.lotus]]
-  ## Provide the Lotus working path.
-  lotus_data = "${HOME}/.lotus"
+	## Provide the multiaddr that the lotus API is listening on. If API multiaddr is empty,
+	## telegraf will check lotus_datapath for values. Default: "${HOME}/.lotus"
+	# lotus_api_multiaddr = "${HOME}/.lotus"
+
+	## Provide the token that telegraf can use to access the lotus API. The token only requires
+	## "read" privileges. This is useful for restricting metrics to a seperate token.
+	# lotus_api_token = ""
+
+	## Provide the Lotus working path. The input plugin will scan the path contents
+	## for the correct listening address/port and API token. Note: Path must be readable
+	## by the telegraf process otherwise, the value should be manually set in api_listen_addr
+	## and api_token. This value is ignored if lotus_api_* values are populated.
+	## Default: "/ip4/0.0.0.0/tcp/1234"
+	lotus_datapath = "/ip4/0.0.0.0/tcp/1234"
+
+	## Set the shortest duration between the processing of each tipset state. Valid time units
+	## are "ns", "us" (or "µs"), "ms", "s", "m", "h". When telegraf starts collecting metrics,
+	## it will also begin walking over the entire chain to update past state changes for the
+	## dashboard. This setting prevents that walk from going too quickly. Default: "1s"
+	chain_walk_throttle = "1s"
 ```
 
 ### Metrics (TODO)
