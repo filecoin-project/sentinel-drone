@@ -12,7 +12,6 @@ import (
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/specs-actors/actors/abi"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/inputs"
@@ -34,7 +33,6 @@ type lotus struct {
 	Config_ChainWalkThrottle string `toml:"chain_walk_throttle"`
 
 	api               api.FullNode
-	lastHeight        int
 	chainWalkThrottle time.Duration
 	shutdown          func()
 }
@@ -134,12 +132,13 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	}
 	l.api = nodeAPI
 
-	if err := l.inflateState(); err != nil {
+	chainHead, err := l.api.ChainHead(context.Background())
+	if err != nil {
 		return err
 	}
 
 	ctx, closeTipsChan := context.WithCancel(context.Background())
-	tipsetsCh, err := internal.GetTips(ctx, l.api, abi.ChainEpoch(0), 3)
+	tipsetsCh, err := internal.GetTips(ctx, l.api, chainHead.Height(), 3)
 	if err != nil {
 		return err
 	}
@@ -153,11 +152,10 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 	l.shutdown = func() {
-		nodeCloser()
 		closeTipsChan()
 		closeBlocksChan()
 		wg.Wait()
-		l.persistState()
+		nodeCloser()
 	}
 
 	// process tipsets
@@ -171,7 +169,6 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 			select {
 			case t := <-tipsetsCh:
 				go processTipset(ctx, l.api, acc, t, time.Now())
-				l.lastHeight = int(t.Height())
 			case <-ctx.Done():
 				return
 			}
