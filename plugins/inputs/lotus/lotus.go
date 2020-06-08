@@ -15,7 +15,7 @@ import (
 	"github.com/filecoin-project/specs-actors/actors/builtin"
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/inputs"
-	"github.com/influxdata/telegraf/plugins/inputs/lotus/internal"
+	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
 	"github.com/ipfs/go-cid"
 	"github.com/multiformats/go-multihash"
 )
@@ -97,7 +97,7 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 		nodeCloser func()
 	)
 	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
-		api, apiCloser, err := internal.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
+		api, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
 			err = fmt.Errorf("connect with credentials: %v", err)
 			return nil, nil, err
@@ -105,7 +105,7 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 		nodeAPI = api
 		nodeCloser = apiCloser
 	} else {
-		api, apiCloser, err := internal.GetFullNodeAPI(l.Config_DataPath)
+		api, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
 		if err != nil {
 			err = fmt.Errorf("connect from lotus state: %v", err)
 			return nil, nil, err
@@ -138,7 +138,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	}
 
 	ctx, closeTipsChan := context.WithCancel(context.Background())
-	tipsetsCh, err := internal.GetTips(ctx, l.api, chainHead.Height(), 3)
+	tipsetsCh, err := rpc.GetTips(ctx, l.api, chainHead.Height(), 3)
 	if err != nil {
 		return err
 	}

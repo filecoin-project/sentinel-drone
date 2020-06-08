@@ -42,8 +42,9 @@ require (
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20181012153825-d7b61745d166
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/ericchiang/k8s v1.2.0
-	github.com/filecoin-project/lotus v0.2.11-0.20200429011108-559b5e788523
-	github.com/filecoin-project/specs-actors v1.0.0
+	github.com/filecoin-project/go-jsonrpc v0.1.1-0.20200602181149-522144ab4e24
+	github.com/filecoin-project/lotus v0.3.3-0.20200608112742-df867f33492c
+	github.com/filecoin-project/specs-actors v0.5.4-0.20200521014528-0df536f7e461
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/glinton/ping v0.1.4-0.20200311211934-5ac87da8cd96
 	github.com/go-logfmt/logfmt v0.5.0
@@ -56,11 +57,9 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/geo v0.0.0-20190916061304-5b978397cfec
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
-	github.com/golang/mock v1.4.3 // indirect
-	github.com/golang/protobuf v1.3.5
+	github.com/golang/protobuf v1.4.2
 	github.com/google/go-cmp v0.4.0
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gorilla/mux v1.7.4
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
@@ -74,8 +73,8 @@ require (
 	github.com/influxdata/tail v1.0.1-0.20180327235535-c43482518d41
 	github.com/influxdata/toml v0.0.0-20190415235208-270119a8ce65
 	github.com/influxdata/wlog v0.0.0-20160411224016-7c63b0a71ef8
-	github.com/ipfs/go-cid v0.0.5
-	github.com/ipfs/go-log/v2 v2.0.5
+	github.com/ipfs/go-cid v0.0.6-0.20200501230655-7c82f3b81c00
+	github.com/ipfs/go-log/v2 v2.0.8
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.6.0+incompatible
 	github.com/jcmturner/gofork v1.0.0 // indirect
@@ -91,7 +90,7 @@ require (
 	github.com/mdlayher/apcupsd v0.0.0-20190314144147-eb3dd99a75fe
 	github.com/miekg/dns v1.1.28
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
-	github.com/multiformats/go-multiaddr v0.2.1
+	github.com/multiformats/go-multiaddr v0.2.2
 	github.com/multiformats/go-multiaddr-net v0.1.5
 	github.com/multiformats/go-multihash v0.0.13
 	github.com/multiplay/go-ts3 v1.0.0
@@ -111,10 +110,10 @@ require (
 	github.com/safchain/ethtool v0.0.0-20200218184317-f459e2d13664
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec // indirect
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
-	github.com/shirou/gopsutil v2.20.2+incompatible
+	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/shopspring/decimal v0.0.0-20200105231215-408a2507e114 // indirect
 	github.com/sirupsen/logrus v1.4.2
-	github.com/soniah/gosnmp v1.22.0
+	github.com/soniah/gosnmp v1.25.0
 	github.com/streadway/amqp v0.0.0-20180528204448-e5adc2ada8b8
 	github.com/stretchr/testify v1.5.1
 	github.com/tbrandon/mbserver v0.0.0-20170611213546-993e1772cc62
@@ -129,10 +128,10 @@ require (
 	github.com/wvanbergen/kazoo-go v0.0.0-20180202103751-f72d8611297a // indirect
 	github.com/yuin/gopher-lua v0.0.0-20180630135845-46796da1b0b4 // indirect
 	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6 // indirect
-	golang.org/x/net v0.0.0-20200301022130-244492dfa37a
+	golang.org/x/net v0.0.0-20200519113804-d87ec0cfa476
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a // indirect
-	golang.org/x/sys v0.0.0-20200409092240-59c9f1ba88fa
+	golang.org/x/sys v0.0.0-20200519105757-fe76b779f299
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20200205215550-e35592f146e4
 	gonum.org/v1/gonum v0.6.2 // indirect
@@ -148,6 +147,8 @@ require (
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/apimachinery v0.17.1 // indirect
 )
+
+replace github.com/golang/protobuf => github.com/golang/protobuf v1.3.5
 
 // replaced due to https://github.com/satori/go.uuid/issues/73
 replace github.com/satori/go.uuid => github.com/gofrs/uuid v3.2.0+incompatible

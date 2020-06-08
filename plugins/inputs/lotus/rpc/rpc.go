@@ -1,4 +1,4 @@
-package internal
+package rpc
 
 import (
 	"context"
@@ -11,13 +11,14 @@ import (
 
 	"golang.org/x/xerrors"
 
+	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain"
 	"github.com/filecoin-project/lotus/chain/store"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/lotus/lib/jsonrpc"
+
 	"github.com/filecoin-project/lotus/node/repo"
 	logging "github.com/ipfs/go-log/v2"
 )
