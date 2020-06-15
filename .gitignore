@@ -3,3 +3,6 @@
 /telegraf.exe
 /telegraf.gz
 /vendor
+
+.update-modules
+.update-telegraf-deps
