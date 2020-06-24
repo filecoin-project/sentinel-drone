@@ -36,7 +36,7 @@ $(FFI_DEPS): .update-telegraf-deps ;
 BUILD_DEPS+=.update-telegraf-deps
 CLEAN+=.update-telegraf-deps
 
-.update-telegraf-deps: $(FFI_PATH)
+.update-telegraf-deps: .update-modules $(FFI_PATH)
 	$(MAKE) -C $(FFI_PATH) $(FFI_DEPS:$(FFI_PATH)%=%)
 	@touch $@
 
