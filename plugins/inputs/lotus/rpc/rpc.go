@@ -82,7 +82,7 @@ sync_complete:
 				return err
 			}
 
-			timestampDelta := time.Now().Unix() - int64(head.MinTimestamp())
+			timestampDelta := uint64(time.Now().Unix() - int64(head.MinTimestamp()))
 
 			log.Infow(
 				"Waiting for reasonable head height",
@@ -93,7 +93,7 @@ sync_complete:
 			// If we get within 20 blocks of the current exected block height we
 			// consider sync complete. Block propagation is not always great but we still
 			// want to be recording stats as soon as we can
-			if timestampDelta < build.BlockDelay*20 {
+			if timestampDelta < build.BlockDelaySecs*20 {
 				return nil
 			}
 		}
