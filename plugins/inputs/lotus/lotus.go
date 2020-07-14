@@ -293,23 +293,6 @@ func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf
 				"tipset_height": fmt.Sprintf("%d", tipset.Height()),
 			}, ts)
 	}
-
-	miners, err := api.StateListMiners(ctx, tipset.Key())
-	for _, miner := range miners {
-		power, err := api.StateMinerPower(ctx, miner, tipset.Key())
-		if err != nil {
-			return err
-		}
-
-		acc.AddGauge("chain.power",
-			map[string]interface{}{
-				"quality_adjusted_power": power.MinerPower.QualityAdjPower.Int64(),
-			},
-			map[string]string{
-				"miner": miner.String(),
-			}, ts)
-	}
-
 	return nil
 }
 
