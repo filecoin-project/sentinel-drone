@@ -452,7 +452,7 @@ BEGIN
 		END 
 		+
 	N'FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS vfs
-	INNER JOIN sys.master_files AS mf WITH (NOLOCK)
+	INNER JOIN sys.main_files AS mf WITH (NOLOCK)
 		ON vfs.[database_id] = mf.[database_id] AND vfs.[file_id] = mf.[file_id]
 	CROSS APPLY sys.dm_os_volume_stats(vfs.[database_id], vfs.[file_id]) AS vs
 	'
@@ -642,8 +642,8 @@ CASE
 	WHEN CAST(SERVERPROPERTY('EngineEdition') AS int) IN (5,8)  --- Join is ONLY for managed instance and SQL DB, not for on-prem
 	THEN CAST(N'LEFT JOIN sys.databases AS d
 	ON LEFT(spi.instance_name, 36) -- some instance_name values have an additional identifier appended after the GUID
-	= CASE WHEN -- in SQL DB standalone, physical_database_name for master is the GUID of the user database
-                d.name = ''master'' AND TRY_CONVERT(uniqueidentifier, d.physical_database_name) IS NOT NULL
+	= CASE WHEN -- in SQL DB standalone, physical_database_name for main is the GUID of the user database
+                d.name = ''main'' AND TRY_CONVERT(uniqueidentifier, d.physical_database_name) IS NOT NULL
                 THEN d.name
                 ELSE d.physical_database_name
 	END	' as NVARCHAR(MAX))
@@ -1588,7 +1588,7 @@ IF SERVERPROPERTY('EngineEdition') NOT IN (5,8)
 		,vs.[available_bytes] AS [available_space_bytes]
 		,vs.[total_bytes] - vs.[available_bytes] AS [used_space_bytes]
 	FROM
-		sys.master_files as mf
+		sys.main_files as mf
 		CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) as vs
 	END
 `
@@ -1817,7 +1817,7 @@ SELECT
     GETDATE() AS baselineDate
 INTO #baseline
 FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS divfs
-INNER JOIN sys.master_files AS mf ON mf.database_id = divfs.database_id
+INNER JOIN sys.main_files AS mf ON mf.database_id = divfs.database_id
 	AND mf.file_id = divfs.file_id
 
 DECLARE @DynamicPivotQuery AS NVARCHAR(MAX)
@@ -1928,7 +1928,7 @@ DB_NAME ([vfs].[database_id]) AS DatabaseName,
 [mf].type_desc  as datafile_type
 INTO #baseline
 FROM sys.dm_io_virtual_file_stats (NULL,NULL) AS [vfs]
-JOIN sys.master_files AS [mf] ON [vfs].[database_id] = [mf].[database_id]
+JOIN sys.main_files AS [mf] ON [vfs].[database_id] = [mf].[database_id]
     AND [vfs].[file_id] = [mf].[file_id]
 
 
@@ -2049,7 +2049,7 @@ SELECT DB_NAME(mf.database_id) AS databaseName ,
     GETDATE() AS baselinedate
 INTO #baseline
 FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS divfs
-INNER JOIN sys.master_files AS mf ON mf.database_id = divfs.database_id
+INNER JOIN sys.main_files AS mf ON mf.database_id = divfs.database_id
 	AND mf.file_id = divfs.file_id
 WAITFOR DELAY @delayInterval;
 ;WITH currentLine AS
@@ -2063,7 +2063,7 @@ WAITFOR DELAY @delayInterval;
 	    divfs.num_of_writes,
 		GETDATE() AS currentlinedate
 	FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS divfs
-	INNER JOIN sys.master_files AS mf ON mf.database_id = divfs.database_id
+	INNER JOIN sys.main_files AS mf ON mf.database_id = divfs.database_id
 			AND mf.file_id = divfs.file_id
 )
 SELECT database_name
@@ -2944,7 +2944,7 @@ SELECT DISTINCT
 , used_bytes = vs.total_bytes - vs.available_bytes
 , used_percent = 100 * CAST(ROUND((vs.total_bytes - vs.available_bytes) * 1. / vs.total_bytes, 2) as decimal(5,2))
 INTO #volumestats
-FROM sys.master_files AS f
+FROM sys.main_files AS f
 CROSS APPLY sys.dm_os_volume_stats(f.database_id, f.file_id) vs
 
 DECLARE @DynamicPivotQuery AS NVARCHAR(MAX)
