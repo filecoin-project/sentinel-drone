@@ -229,7 +229,7 @@ func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, rece
 	if err != nil {
 		return err
 	}
-	acc.AddFields("chain.block",
+	acc.AddFields("chain_block",
 		map[string]interface{}{
 			"tipset_height":    newHeader.Height,
 			"election":         1,
@@ -275,7 +275,7 @@ func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf
 	//return err
 	//}
 
-	acc.AddGauge("chain.economics",
+	acc.AddGauge("chain_economics",
 		map[string]interface{}{
 			"total_supply":       netBalFilFloat,
 			"pledged_collateral": pcFilFloat,
@@ -284,7 +284,7 @@ func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf
 		}, ts)
 
 	for _, blockHeader := range tipset.Blocks() {
-		acc.AddFields("chain.election",
+		acc.AddFields("chain_election",
 			map[string]interface{}{
 				"election": 1,
 			},
@@ -309,7 +309,7 @@ func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc teleg
 		return fmt.Errorf("no cids in tipset")
 	}
 
-	acc.AddFields("chain.tipset",
+	acc.AddFields("chain_tipset",
 		map[string]interface{}{
 			"recorded_at":   receivedAt.UnixNano(),
 			"tipset_height": int(tipset.Height()),
@@ -335,7 +335,7 @@ func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc teleg
 			return err
 		}
 
-		acc.AddHistogram("chain.messages",
+		acc.AddHistogram("chain_messages",
 			map[string]interface{}{
 				"gas_price":    msg.Message.GasPrice.Int64(),
 				"message_size": len(bs),
@@ -370,7 +370,7 @@ func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc teleg
 	}
 
 	for t, m := range msgn {
-		acc.AddFields("chain.actors",
+		acc.AddFields("chain_actors",
 			map[string]interface{}{
 				"count": len(m),
 			}, map[string]string{
