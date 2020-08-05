@@ -6,3 +6,5 @@
 
 .update-modules
 .update-telegraf-deps
+
+.idea
