@@ -9,21 +9,29 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipfs/go-cid"
+	"github.com/multiformats/go-multihash"
+
+	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/plugins/inputs"
+	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
+
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
-	"github.com/influxdata/telegraf"
-	"github.com/influxdata/telegraf/plugins/inputs"
-	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
-	"github.com/ipfs/go-cid"
-	"github.com/multiformats/go-multihash"
 )
 
 const (
 	DefaultConfig_DataPath          = "${HOME}/.lotus"
 	DefaultConfig_APIListenAddr     = "/ip4/0.0.0.0/tcp/1234"
 	DefaultConfig_ChainWalkThrottle = "1s"
+)
+
+const (
+	MpoolBootstrap = -1
+	MpoolAdd       = api.MpoolAdd
+	MpoolRemove    = api.MpoolRemove
 )
 
 type lotus struct {
@@ -137,6 +145,10 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		return err
 	}
 
+	if err := recordMpoolPendingPoints(context.Background(), l.api, chainHead.Key(), acc, time.Now()); err != nil {
+		return err
+	}
+
 	ctx, closeTipsChan := context.WithCancel(context.Background())
 	tipsetsCh, err := rpc.GetTips(ctx, l.api, chainHead.Height(), 3)
 	if err != nil {
@@ -149,11 +161,18 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		return err
 	}
 
+	ctx, closeMsgChan := context.WithCancel(context.Background())
+	msgCh, err := l.api.MpoolSub(ctx)
+	if err != nil {
+		return err
+	}
+
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
+	wg.Add(3)
 	l.shutdown = func() {
 		closeTipsChan()
 		closeBlocksChan()
+		closeMsgChan()
 		wg.Wait()
 		nodeCloser()
 	}
@@ -190,6 +209,20 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	}
 	go processHeaders()
 
+	// process new messages
+	processMpoolUpdates := func() {
+		defer wg.Done()
+		for {
+			select {
+			case mpu := <-msgCh:
+				go processMpoolUpdate(ctx, acc, mpu, time.Now())
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+	go processMpoolUpdates()
+
 	return nil
 }
 
@@ -211,7 +244,7 @@ func processTipset(ctx context.Context, node api.FullNode, acc telegraf.Accumula
 }
 
 func processHeader(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) {
-	err := recordBlockHeaderPoints(ctx, acc, receivedAt, newHeader)
+	err := recordBlockHeaderPoints(ctx, acc, newHeader, receivedAt)
 	if err != nil {
 		log.Println("W! Failed to record block header", "height", newHeader.Height, "error", err)
 		acc.AddError(fmt.Errorf("recording block header (@%d cid: %s): %v", newHeader.Height, err))
@@ -220,11 +253,19 @@ func processHeader(ctx context.Context, acc telegraf.Accumulator, newHeader *typ
 	log.Println("I! Processed block header @ height:", newHeader.Height)
 }
 
+func processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
+	if err := recordMpoolUpdatePoints(ctx, acc, newMpoolUpdate, receivedAt); err != nil {
+		log.Println("W! Failed to record mpool update", "msg", newMpoolUpdate.Message.Cid().String(), "type", newMpoolUpdate.Type, "error", err.Error())
+		acc.AddError(fmt.Errorf("recording mpool update (type: %d, cid: %s): %v", newMpoolUpdate.Type, newMpoolUpdate.Message.Cid(), err))
+		return
+	}
+}
+
 func (l *lotus) Stop() {
 	l.shutdown()
 }
 
-func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, receivedAt time.Time, newHeader *types.BlockHeader) error {
+func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {
 	bs, err := newHeader.Serialize()
 	if err != nil {
 		return err
@@ -292,6 +333,46 @@ func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf
 				"miner":         blockHeader.Miner.String(),
 				"tipset_height": fmt.Sprintf("%d", tipset.Height()),
 			}, ts)
+	}
+	return nil
+}
+
+func recordMpoolUpdatePoints(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) error {
+	var updateType string
+	switch newMpoolUpdate.Type {
+	case MpoolAdd:
+		updateType = "add"
+	case MpoolRemove:
+		updateType = "rm"
+	case MpoolBootstrap:
+		updateType = "init"
+	default:
+		return fmt.Errorf("unknown mpool update type: %v", newMpoolUpdate.Type)
+	}
+
+	acc.AddFields("chain_mpool",
+		map[string]interface{}{
+			"message_size": newMpoolUpdate.Message.Size(),
+			"recorded_at":  receivedAt.UnixNano(),
+		},
+		map[string]string{
+			"message_cid_tag":       newMpoolUpdate.Message.Cid().String(),
+			"mpool_update_type_tag": updateType,
+		},
+		receivedAt)
+	return nil
+}
+
+func recordMpoolPendingPoints(ctx context.Context, lotusAPI api.FullNode, head types.TipSetKey, acc telegraf.Accumulator, receivedAt time.Time) error {
+	pendingMsgs, err := lotusAPI.MpoolPending(context.Background(), head)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range pendingMsgs {
+		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
+			return err
+		}
 	}
 	return nil
 }
