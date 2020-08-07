@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
@@ -45,6 +46,11 @@ type LotusPeerIDTagger struct {
 	Config_APIListenAddr string `toml:"lotus_api_multiaddr"`
 	Config_APIToken      string `toml:"lotus_api_token"`
 
+	apiBackOffThrottle time.Duration
+	curAPIBackOff time.Time
+
+	initializedDefaults bool
+
 	Excludes []Exclude `toml:"exclude"`
 
 	excludeMap map[string]struct{}
@@ -52,28 +58,29 @@ type LotusPeerIDTagger struct {
 	peerID peer.ID
 }
 
-func (l *LotusPeerIDTagger) setDefaults() {
+func (l *LotusPeerIDTagger) setAPIConfigDefaults() {
 	if len(l.Config_DataPath) == 0 {
 		l.Config_DataPath = DefaultConfig_DataPath
 	}
 	if len(l.Config_APIListenAddr) == 0 {
 		l.Config_APIListenAddr = DefaultConfig_APIListenAddr
 	}
+	l.apiBackOffThrottle = time.Second * 10
+	l.curAPIBackOff = time.Unix(0,0)
 }
 
-func (l *LotusPeerIDTagger) setPeerID() {
+func (l *LotusPeerIDTagger) setPeerID() error {
 	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig()
 	if err != nil {
-		log.Println("E! Failed to get lotus api", "error", err.Error())
-		return
+		return err
 	}
 	defer nodeCloser()
 	pid, err := nodeAPI.ID(context.Background())
 	if err != nil {
-		log.Println("E! Failed to get lotus peer ID", "error", err.Error())
-		return
+		return err
 	}
 	l.peerID = pid
+	return nil
 }
 
 func (l *LotusPeerIDTagger) setExcludeMap() {
@@ -118,14 +125,27 @@ func (l *LotusPeerIDTagger) Description() string {
 }
 
 func (l *LotusPeerIDTagger) Apply(in ...telegraf.Metric) []telegraf.Metric {
-	if l.peerID.Size() == 0 {
-		log.Println("Setting up lotus_peer_id processor")
+	if !l.initializedDefaults {
 		// configure lotus connection
-		l.setDefaults()
-		// extract peerID from connected lotus daemon
-		l.setPeerID()
+		l.setAPIConfigDefaults()
 		// create mapping of excluded metrics for faster processing.
 		l.setExcludeMap()
+		l.initializedDefaults = true
+	}
+
+	if time.Since(l.curAPIBackOff) < l.apiBackOffThrottle{
+		return nil
+	}
+
+	if l.peerID.Size() == 0 {
+		log.Println("Setting up lotus_peer_id processor")
+		// extract peerID from connected lotus daemon
+		if err := l.setPeerID(); err != nil {
+			log.Println("!E Failed to get peerID from lotus API", err.Error())
+			l.curAPIBackOff = time.Now()
+			log.Println("!E Back off for", l.apiBackOffThrottle.String())
+		}
+		return nil
 	}
 
 	for _, point := range in {
