@@ -9,9 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipfs/go-cid"
-	"github.com/multiformats/go-multihash"
-
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
@@ -397,69 +394,6 @@ func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc teleg
 			"block_count":   len(cids),
 		},
 		map[string]string{}, ts)
-
-	msgs, err := api.ChainGetParentMessages(ctx, cids[0])
-	if err != nil {
-		return err
-	}
-
-	recp, err := api.ChainGetParentReceipts(ctx, cids[0])
-	if err != nil {
-		return err
-	}
-
-	msgn := make(map[msgTag][]cid.Cid)
-
-	for i, msg := range msgs {
-		bs, err := msg.Message.Serialize()
-		if err != nil {
-			return err
-		}
-
-		acc.AddHistogram("chain_messages",
-			map[string]interface{}{
-				"gas_price":    msg.Message.GasPrice.Int64(),
-				"message_size": len(bs),
-			}, map[string]string{}, ts)
-
-		// capture actor message stats
-		actor, err := api.StateGetActor(ctx, msg.Message.To, tipset.Key())
-		if err != nil {
-			return err
-		}
-
-		dm, err := multihash.Decode(actor.Code.Hash())
-		if err != nil {
-			continue
-		}
-		tag := msgTag{
-			actor:    string(dm.Digest),
-			method:   uint64(msg.Message.Method),
-			exitcode: uint8(recp[i].ExitCode),
-		}
-
-		found := false
-		for _, c := range msgn[tag] {
-			if c.Equals(msg.Cid) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			msgn[tag] = append(msgn[tag], msg.Cid)
-		}
-	}
-
-	for t, m := range msgn {
-		acc.AddFields("chain_actors",
-			map[string]interface{}{
-				"count": len(m),
-			}, map[string]string{
-				"actor":    t.actor,
-				"method":   fmt.Sprintf("%d", t.method),
-				"exitcode": fmt.Sprintf("%d", t.exitcode),
-			}, ts)
-	}
 
 	return nil
 }
