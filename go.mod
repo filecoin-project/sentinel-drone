@@ -41,7 +41,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/ericchiang/k8s v1.2.0
 	github.com/filecoin-project/go-jsonrpc v0.1.1-0.20200602181149-522144ab4e24
-	github.com/filecoin-project/lotus v0.4.3-0.20200807031233-ec098d48339b
+	github.com/filecoin-project/lotus v0.4.3-0.20200808023846-2340742ebec1
 	github.com/filecoin-project/specs-actors v0.8.7-0.20200805174427-9d42fb163883
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/glinton/ping v0.1.4-0.20200311211934-5ac87da8cd96
