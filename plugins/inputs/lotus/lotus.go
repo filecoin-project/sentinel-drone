@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -102,20 +103,20 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 		nodeCloser func()
 	)
 	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
-		api, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
 			err = fmt.Errorf("connect with credentials: %v", err)
 			return nil, nil, err
 		}
-		nodeAPI = api
+		nodeAPI = lotusAPI
 		nodeCloser = apiCloser
 	} else {
-		api, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
 		if err != nil {
 			err = fmt.Errorf("connect from lotus state: %v", err)
 			return nil, nil, err
 		}
-		nodeAPI = api
+		nodeAPI = lotusAPI
 		nodeCloser = apiCloser
 	}
 	return nodeAPI, nodeCloser, nil
@@ -136,6 +137,10 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		return err
 	}
 	l.api = nodeAPI
+
+	if err := recordLotusInfoPoints(context.Background(), l.api, acc); err != nil {
+		return err
+	}
 
 	chainHead, err := l.api.ChainHead(context.Background())
 	if err != nil {
@@ -394,6 +399,38 @@ func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc teleg
 			"block_count":   len(cids),
 		},
 		map[string]string{}, ts)
+
+	return nil
+}
+
+func recordLotusInfoPoints(ctx context.Context, api api.FullNode, acc telegraf.Accumulator) error {
+	nodePeerID, err := api.ID(context.Background())
+	if err != nil {
+		return err
+	}
+
+	v, err := api.Version(ctx)
+	if err != nil {
+		return err
+	}
+	versionTokens := strings.SplitN(v.Version, "+", 2)
+	version := versionTokens[0]
+	commit := versionTokens[1]
+
+	network, err := api.StateNetworkName(ctx)
+	if err != nil {
+		return err
+	}
+
+	acc.AddFields("lotus_info",
+		map[string]interface{}{},
+		map[string]string{
+			"api_version": v.APIVersion.String(),
+			"commit":      commit,
+			"network":     string(network),
+			"peer_id":     nodePeerID.String(),
+			"version":     version,
+		})
 
 	return nil
 }
