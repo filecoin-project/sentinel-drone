@@ -34,24 +34,28 @@ var sampleConfig = fmt.Sprintf(`
 	## and api_token. This value is ignored if lotus_api_* values are populated.
 	## Default: "%[2]s"
 	lotus_datapath = "%[2]s"
+	
+	## Provide the measurments that should be excluded from receiving a peer_id tag.
+	# exclude = [
+		tag_name_to_exclude,
+	# ]
 
-`, DefaultConfig_DataPath, DefaultConfig_APIListenAddr)
+`, DefaultConfig_APIListenAddr, DefaultConfig_DataPath)
 
 type Exclude struct {
 	Measurement string `toml:"measurement"`
 }
 
 type LotusPeerIDTagger struct {
-	Config_DataPath      string `toml:"lotus_datapath"`
-	Config_APIListenAddr string `toml:"lotus_api_multiaddr"`
-	Config_APIToken      string `toml:"lotus_api_token"`
+	Config_DataPath      string    `toml:"lotus_datapath"`
+	Config_APIListenAddr string    `toml:"lotus_api_multiaddr"`
+	Config_APIToken      string    `toml:"lotus_api_token"`
+	Config_Excluded      []Exclude `toml:"exclude"`
 
 	apiBackOffThrottle time.Duration
-	curAPIBackOff time.Time
+	curAPIBackOff      time.Time
 
 	initializedDefaults bool
-
-	Excludes []Exclude `toml:"exclude"`
 
 	excludeMap map[string]struct{}
 
@@ -66,7 +70,7 @@ func (l *LotusPeerIDTagger) setAPIConfigDefaults() {
 		l.Config_APIListenAddr = DefaultConfig_APIListenAddr
 	}
 	l.apiBackOffThrottle = time.Second * 10
-	l.curAPIBackOff = time.Unix(0,0)
+	l.curAPIBackOff = time.Unix(0, 0)
 }
 
 func (l *LotusPeerIDTagger) setPeerID() error {
@@ -85,7 +89,7 @@ func (l *LotusPeerIDTagger) setPeerID() error {
 
 func (l *LotusPeerIDTagger) setExcludeMap() {
 	ex := make(map[string]struct{})
-	for _, e := range l.Excludes {
+	for _, e := range l.Config_Excluded {
 		ex[e.Measurement] = struct{}{}
 	}
 	l.excludeMap = ex
@@ -97,20 +101,20 @@ func (l *LotusPeerIDTagger) getAPIUsingLotusConfig() (api.FullNode, func(), erro
 		nodeCloser func()
 	)
 	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
-		api, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
 			err = fmt.Errorf("connect with credentials: %v", err)
 			return nil, nil, err
 		}
-		nodeAPI = api
+		nodeAPI = lotusAPI
 		nodeCloser = apiCloser
 	} else {
-		api, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
 		if err != nil {
 			err = fmt.Errorf("connect from lotus state: %v", err)
 			return nil, nil, err
 		}
-		nodeAPI = api
+		nodeAPI = lotusAPI
 		nodeCloser = apiCloser
 	}
 	return nodeAPI, nodeCloser, nil
@@ -121,7 +125,7 @@ func (l *LotusPeerIDTagger) SampleConfig() string {
 }
 
 func (l *LotusPeerIDTagger) Description() string {
-	return "Decorate measurements that pass through this filter with the peer id of lotus daemon."
+	return "Acquires the PeerID of a running Lotus daemon and includes it on measurements as a tag."
 }
 
 func (l *LotusPeerIDTagger) Apply(in ...telegraf.Metric) []telegraf.Metric {
@@ -133,24 +137,23 @@ func (l *LotusPeerIDTagger) Apply(in ...telegraf.Metric) []telegraf.Metric {
 		l.initializedDefaults = true
 	}
 
-	if time.Since(l.curAPIBackOff) < l.apiBackOffThrottle{
-		return nil
+	if time.Since(l.curAPIBackOff) < l.apiBackOffThrottle {
+		return in
 	}
 
 	if l.peerID.Size() == 0 {
-		log.Println("Setting up lotus_peer_id processor")
+		log.Println("I! Setting up lotus_peer_id processor")
 		// extract peerID from connected lotus daemon
 		if err := l.setPeerID(); err != nil {
-			log.Println("!E Failed to get peerID from lotus API", err.Error())
+			log.Println("!E Failed to get peerID from lotus API", err.Error(), "Metrics Skipped:", len(in))
 			l.curAPIBackOff = time.Now()
-			log.Println("!E Back off for", l.apiBackOffThrottle.String())
+			return in
 		}
-		return nil
 	}
 
 	for _, point := range in {
 		if _, exclude := l.excludeMap[point.Name()]; !exclude {
-			point.AddTag("lotus_peer_id", l.peerID.String())
+			point.AddTag("peer_id", l.peerID.String())
 		}
 	}
 	return in

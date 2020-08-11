@@ -29,7 +29,7 @@ func TestTagMetricWithPeerID(t *testing.T) {
 
 	p := LotusPeerIDTagger{
 		peerID: pid, // setting the peerID causes LotusPeerIDTagger to skip api init allowing Apply to be called
-		Excludes:             []Exclude{
+		Config_Excluded:             []Exclude{
 			{Measurement: "bar"}, // we will ignore measures with this name
 		},
 	}
