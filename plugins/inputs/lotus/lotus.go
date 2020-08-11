@@ -496,9 +496,7 @@ func recordLotusInfoPoints(ctx context.Context, api api.FullNode, acc telegraf.A
 	}
 
 	acc.AddFields("lotus_info",
-		map[string]interface{}{
-			"recorded_at": time.Now().UnixNano(),
-		},
+		map[string]interface{}{},
 		map[string]string{
 			"api_version": v.APIVersion.String(),
 			"commit":      commit,
