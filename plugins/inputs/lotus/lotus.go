@@ -479,20 +479,13 @@ func recordLotusInfoPoints(ctx context.Context, api api.FullNode, acc telegraf.A
 	if err != nil {
 		return err
 	}
+	versionTokens := strings.SplitN(v.Version, "+", 2)
+	version := versionTokens[0]
+	commit := versionTokens[1]
 
 	network, err := api.StateNetworkName(ctx)
 	if err != nil {
 		return err
-	}
-	var commit string
-	var version string
-	versionTokens := strings.Split(v.Version, "+")
-	if len(versionTokens) == 2 {
-		version = versionTokens[0]
-		commit = versionTokens[1]
-	} else {
-		log.Println("W! developer error, version string has changed format")
-		version = v.Version
 	}
 
 	acc.AddFields("lotus_info",
