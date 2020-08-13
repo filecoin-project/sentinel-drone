@@ -290,16 +290,8 @@ func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newH
 }
 
 func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf.Accumulator, tipset *types.TipSet) error {
-	pc, err := api.StatePledgeCollateral(ctx, tipset.Key())
-	if err != nil {
-		return err
-	}
-
 	attoFil := types.NewInt(build.FilecoinPrecision).Int
 	ts := time.Unix(int64(tipset.MinTimestamp()), int64(0))
-
-	pcFil := new(big.Rat).SetFrac(pc.Int, attoFil)
-	pcFilFloat, _ := pcFil.Float64()
 
 	netBal, err := api.WalletBalance(ctx, builtin.RewardActorAddr)
 	if err != nil {
@@ -320,21 +312,23 @@ func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf
 
 	acc.AddGauge("chain_economics",
 		map[string]interface{}{
-			"total_supply":       netBalFilFloat,
-			"pledged_collateral": pcFilFloat,
+			"total_supply": netBalFilFloat,
 		}, map[string]string{
 			"tipset_height": fmt.Sprintf("%d", tipset.Height()),
 		}, ts)
+	return nil
+}
 
-	for _, blockHeader := range tipset.Blocks() {
-		acc.AddFields("chain_election",
-			map[string]interface{}{
-				"election": 1,
-			},
-			map[string]string{
-				"miner":         blockHeader.Miner.String(),
-				"tipset_height": fmt.Sprintf("%d", tipset.Height()),
-			}, ts)
+func recordMpoolPendingPoints(ctx context.Context, lotusAPI api.FullNode, head types.TipSetKey, acc telegraf.Accumulator, receivedAt time.Time) error {
+	pendingMsgs, err := lotusAPI.MpoolPending(context.Background(), head)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range pendingMsgs {
+		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -362,20 +356,6 @@ func recordMpoolUpdatePoints(ctx context.Context, acc telegraf.Accumulator, newM
 			"mpool_update_type_tag": updateType,
 		},
 		receivedAt)
-	return nil
-}
-
-func recordMpoolPendingPoints(ctx context.Context, lotusAPI api.FullNode, head types.TipSetKey, acc telegraf.Accumulator, receivedAt time.Time) error {
-	pendingMsgs, err := lotusAPI.MpoolPending(context.Background(), head)
-	if err != nil {
-		return err
-	}
-
-	for _, m := range pendingMsgs {
-		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
