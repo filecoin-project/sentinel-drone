@@ -237,11 +237,6 @@ func processTipset(ctx context.Context, node api.FullNode, acc telegraf.Accumula
 		return
 	}
 
-	if err := recordTipsetStatePoints(ctx, node, acc, newTipSet); err != nil {
-		log.Println("W! Failed to record state", "height", height, "error", err)
-		acc.AddError(fmt.Errorf("recording state from tipset (@%d): %v", height, err))
-		return
-	}
 	log.Println("I! Processed tipset height:", height)
 }
 
@@ -289,52 +284,16 @@ func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newH
 	return nil
 }
 
-func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf.Accumulator, tipset *types.TipSet) error {
-	pc, err := api.StatePledgeCollateral(ctx, tipset.Key())
+func recordMpoolPendingPoints(ctx context.Context, lotusAPI api.FullNode, head types.TipSetKey, acc telegraf.Accumulator, receivedAt time.Time) error {
+	pendingMsgs, err := lotusAPI.MpoolPending(context.Background(), head)
 	if err != nil {
 		return err
 	}
 
-	attoFil := types.NewInt(build.FilecoinPrecision).Int
-	ts := time.Unix(int64(tipset.MinTimestamp()), int64(0))
-
-	pcFil := new(big.Rat).SetFrac(pc.Int, attoFil)
-	pcFilFloat, _ := pcFil.Float64()
-
-	netBal, err := api.WalletBalance(ctx, builtin.RewardActorAddr)
-	if err != nil {
-		return err
-	}
-
-	netBalFil := new(big.Rat).SetFrac(netBal.Int, attoFil)
-	netBalFilFloat, _ := netBalFil.Float64()
-
-	// this is suppose to represent total miner power, but if full power can be
-	// represented by 'chain.power' metric below, we should be able to simply
-	// sum the total within the DB for each epoch.
-	// ignoring this for now.
-	//power, err := api.StateMinerPower(ctx, address.Address{}, tipset.Key())
-	//if err != nil {
-	//return err
-	//}
-
-	acc.AddGauge("chain_economics",
-		map[string]interface{}{
-			"total_supply":       netBalFilFloat,
-			"pledged_collateral": pcFilFloat,
-		}, map[string]string{
-			"tipset_height": fmt.Sprintf("%d", tipset.Height()),
-		}, ts)
-
-	for _, blockHeader := range tipset.Blocks() {
-		acc.AddFields("chain_election",
-			map[string]interface{}{
-				"election": 1,
-			},
-			map[string]string{
-				"miner":         blockHeader.Miner.String(),
-				"tipset_height": fmt.Sprintf("%d", tipset.Height()),
-			}, ts)
+	for _, m := range pendingMsgs {
+		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
+			return err
+		}
 	}
 	return nil
 }
