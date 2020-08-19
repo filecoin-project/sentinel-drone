@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/big"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,9 +14,7 @@ import (
 	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
 
 	"github.com/filecoin-project/lotus/api"
-	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/specs-actors/actors/builtin"
 )
 
 const (
@@ -321,20 +318,6 @@ func recordMpoolUpdatePoints(ctx context.Context, acc telegraf.Accumulator, newM
 			"mpool_update_type_tag": updateType,
 		},
 		receivedAt)
-	return nil
-}
-
-func recordMpoolPendingPoints(ctx context.Context, lotusAPI api.FullNode, head types.TipSetKey, acc telegraf.Accumulator, receivedAt time.Time) error {
-	pendingMsgs, err := lotusAPI.MpoolPending(context.Background(), head)
-	if err != nil {
-		return err
-	}
-
-	for _, m := range pendingMsgs {
-		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
