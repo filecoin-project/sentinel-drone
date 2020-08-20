@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/big"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,9 +14,7 @@ import (
 	"github.com/influxdata/telegraf/plugins/inputs/lotus/rpc"
 
 	"github.com/filecoin-project/lotus/api"
-	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/specs-actors/actors/builtin"
 )
 
 const (
@@ -237,11 +234,6 @@ func processTipset(ctx context.Context, node api.FullNode, acc telegraf.Accumula
 		return
 	}
 
-	if err := recordTipsetStatePoints(ctx, node, acc, newTipSet); err != nil {
-		log.Println("W! Failed to record state", "height", height, "error", err)
-		acc.AddError(fmt.Errorf("recording state from tipset (@%d): %v", height, err))
-		return
-	}
 	log.Println("I! Processed tipset height:", height)
 }
 
@@ -286,36 +278,6 @@ func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newH
 			"miner_tag":         newHeader.Miner.String(),
 		},
 		receivedAt)
-	return nil
-}
-
-func recordTipsetStatePoints(ctx context.Context, api api.FullNode, acc telegraf.Accumulator, tipset *types.TipSet) error {
-	attoFil := types.NewInt(build.FilecoinPrecision).Int
-	ts := time.Unix(int64(tipset.MinTimestamp()), int64(0))
-
-	netBal, err := api.WalletBalance(ctx, builtin.RewardActorAddr)
-	if err != nil {
-		return err
-	}
-
-	netBalFil := new(big.Rat).SetFrac(netBal.Int, attoFil)
-	netBalFilFloat, _ := netBalFil.Float64()
-
-	// this is suppose to represent total miner power, but if full power can be
-	// represented by 'chain.power' metric below, we should be able to simply
-	// sum the total within the DB for each epoch.
-	// ignoring this for now.
-	//power, err := api.StateMinerPower(ctx, address.Address{}, tipset.Key())
-	//if err != nil {
-	//return err
-	//}
-
-	acc.AddGauge("chain_economics",
-		map[string]interface{}{
-			"total_supply": netBalFilFloat,
-		}, map[string]string{
-			"tipset_height": fmt.Sprintf("%d", tipset.Height()),
-		}, ts)
 	return nil
 }
 
