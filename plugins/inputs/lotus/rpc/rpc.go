@@ -2,20 +2,14 @@ package rpc
 
 import (
 	"context"
-	"net/http"
-	"time"
-
 	"github.com/filecoin-project/specs-actors/actors/abi"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
-
-	"golang.org/x/xerrors"
+	"net/http"
 
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
-	"github.com/filecoin-project/lotus/build"
-	"github.com/filecoin-project/lotus/chain"
 	"github.com/filecoin-project/lotus/chain/store"
 	"github.com/filecoin-project/lotus/chain/types"
 
@@ -24,81 +18,6 @@ import (
 )
 
 var log = logging.Logger("stats")
-
-func WaitForSyncComplete(ctx context.Context, napi api.FullNode) error {
-sync_complete:
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(5 * time.Second):
-			state, err := napi.SyncState(ctx)
-			if err != nil {
-				return err
-			}
-
-			for i, w := range state.ActiveSyncs {
-				if w.Target == nil {
-					continue
-				}
-
-				if w.Stage == api.StageSyncErrored {
-					log.Errorw(
-						"Syncing",
-						"worker", i,
-						"base", w.Base.Key(),
-						"target", w.Target.Key(),
-						"target_height", w.Target.Height(),
-						"height", w.Height,
-						"error", w.Message,
-						"stage", chain.SyncStageString(w.Stage),
-					)
-				} else {
-					log.Infow(
-						"Syncing",
-						"worker", i,
-						"base", w.Base.Key(),
-						"target", w.Target.Key(),
-						"target_height", w.Target.Height(),
-						"height", w.Height,
-						"stage", chain.SyncStageString(w.Stage),
-					)
-				}
-
-				if w.Stage == api.StageSyncComplete {
-					break sync_complete
-				}
-			}
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(5 * time.Second):
-			head, err := napi.ChainHead(ctx)
-			if err != nil {
-				return err
-			}
-
-			timestampDelta := uint64(time.Now().Unix() - int64(head.MinTimestamp()))
-
-			log.Infow(
-				"Waiting for reasonable head height",
-				"height", head.Height(),
-				"timestamp_delta", timestampDelta,
-			)
-
-			// If we get within 20 blocks of the current exected block height we
-			// consider sync complete. Block propagation is not always great but we still
-			// want to be recording stats as soon as we can
-			if timestampDelta < build.BlockDelaySecs*20 {
-				return nil
-			}
-		}
-	}
-}
 
 func GetTips(ctx context.Context, api api.FullNode, lastHeight abi.ChainEpoch, headlag int) (<-chan *types.TipSet, error) {
 	chmain := make(chan *types.TipSet)
@@ -112,9 +31,6 @@ func GetTips(ctx context.Context, api api.FullNode, lastHeight abi.ChainEpoch, h
 
 	go func() {
 		defer close(chmain)
-
-		ping := time.Tick(30 * time.Second)
-
 		for {
 			select {
 			case changes := <-notif:
@@ -140,21 +56,8 @@ func GetTips(ctx context.Context, api api.FullNode, lastHeight abi.ChainEpoch, h
 						hb.Pop()
 					}
 				}
-			case <-ping:
-				log.Info("Running health check")
-
-				cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-
-				if _, err := api.ID(cctx); err != nil {
-					log.Error("Health check failed")
-					cancel()
-					return
-				}
-
-				cancel()
-
-				log.Info("Node online")
 			case <-ctx.Done():
+				log.Error("GetTipSet Shutting down")
 				return
 			}
 		}
@@ -222,11 +125,11 @@ func getAPI(path string) (string, http.Header, error) {
 		return "", nil, err
 	}
 
-	ma, err := r.APIEndpoint()
+	maddr, err := r.APIEndpoint()
 	if err != nil {
-		return "", nil, xerrors.Errorf("failed to get api endpoint: %w", err)
+		return "", nil, err
 	}
-	_, addr, err := manet.DialArgs(ma)
+	_, addr, err := manet.DialArgs(maddr)
 	if err != nil {
 		return "", nil, err
 	}

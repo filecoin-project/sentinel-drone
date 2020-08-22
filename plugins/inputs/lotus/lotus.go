@@ -6,7 +6,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/influxdata/telegraf"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/lotus/node/repo"
 )
 
 const (
@@ -44,7 +44,7 @@ func newLotus() *lotus {
 	return &lotus{}
 }
 
-func (l *lotus) setDefaults() {
+func (l *lotus) setDefaults() error {
 	if len(l.Config_DataPath) == 0 {
 		l.Config_DataPath = DefaultConfig_DataPath
 	}
@@ -54,6 +54,12 @@ func (l *lotus) setDefaults() {
 	if len(l.Config_ChainWalkThrottle) == 0 {
 		l.Config_ChainWalkThrottle = DefaultConfig_ChainWalkThrottle
 	}
+	throttleDuration, err := time.ParseDuration(l.Config_ChainWalkThrottle)
+	if err != nil {
+		return err
+	}
+	l.chainWalkThrottle = throttleDuration
+	return nil
 }
 
 // Description will appear directly above the plugin definition in the config file
@@ -94,7 +100,7 @@ func (l *lotus) Gather(acc telegraf.Accumulator) error {
 	return nil
 }
 
-func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
+func (l *lotus) getAPIUsingLotusConfig(ctx context.Context) (api.FullNode, func(), error) {
 	var (
 		nodeAPI    api.FullNode
 		nodeCloser func()
@@ -102,7 +108,6 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
 		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
-			err = fmt.Errorf("connect with credentials: %v", err)
 			return nil, nil, err
 		}
 		nodeAPI = lotusAPI
@@ -110,7 +115,6 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 	} else {
 		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
 		if err != nil {
-			err = fmt.Errorf("connect from lotus state: %v", err)
 			return nil, nil, err
 		}
 		nodeAPI = lotusAPI
@@ -119,122 +123,247 @@ func (l *lotus) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
 	return nodeAPI, nodeCloser, nil
 }
 
-// Start begins walking through the chain to update the datastore
-func (l *lotus) Start(acc telegraf.Accumulator) error {
-	l.setDefaults()
-
-	throttleDuration, err := time.ParseDuration(l.Config_ChainWalkThrottle)
-	if err != nil {
-		return err
-	}
-	l.chainWalkThrottle = throttleDuration
-
-	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig()
-	if err != nil {
-		return err
-	}
-	l.api = nodeAPI
-
-	if err := recordLotusInfoPoints(context.Background(), l.api, acc); err != nil {
-		return err
-	}
-
-	chainHead, err := l.api.ChainHead(context.Background())
-	if err != nil {
-		return err
-	}
-
-	if err := recordMpoolPendingPoints(context.Background(), l.api, chainHead.Key(), acc, time.Now()); err != nil {
-		return err
-	}
-
-	ctx, closeTipsChan := context.WithCancel(context.Background())
+func (l *lotus) runWorkers(ctx context.Context, acc telegraf.Accumulator, chainHead *types.TipSet, die chan struct{}) error {
 	tipsetsCh, err := rpc.GetTips(ctx, l.api, chainHead.Height(), 3)
 	if err != nil {
 		return err
 	}
 
-	ctx, closeBlocksChan := context.WithCancel(context.Background())
 	headCh, err := l.api.SyncIncomingBlocks(ctx)
 	if err != nil {
 		return err
 	}
 
-	ctx, closeMsgChan := context.WithCancel(context.Background())
 	msgCh, err := l.api.MpoolSub(ctx)
 	if err != nil {
 		return err
 	}
+	// process new tipsets
+	go l.processTipSets(ctx, tipsetsCh, acc, die)
 
-	wg := new(sync.WaitGroup)
-	wg.Add(3)
-	l.shutdown = func() {
-		closeTipsChan()
-		closeBlocksChan()
-		closeMsgChan()
-		wg.Wait()
+	// process new headers
+	go l.processBlockHeaders(ctx, headCh, acc, die)
+
+	// process new messages
+	go l.processMpoolUpdates(ctx, msgCh, acc, die)
+
+	log.Println("!D started workers")
+	return nil
+}
+
+func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, fatalErrors chan error, workerDie chan struct{}) error {
+	var nodeAPI api.FullNode
+	var nodeCloser func()
+	var err error
+
+	// wait for the node to come online
+	for range time.Tick(2 * time.Second) {
+		nodeAPI, nodeCloser, err = l.getAPIUsingLotusConfig(ctx)
+		if err != nil {
+			if err == repo.ErrNoAPIEndpoint {
+				log.Println("W! Api not online retrying...")
+				continue
+			}
+			fatalErrors <- err
+			continue
+		}
+		break
+	}
+	// great were online, lets get to work
+	l.api = nodeAPI
+
+	// collect the current head
+	chainHead, err := l.api.ChainHead(ctx)
+	if err != nil {
+		fatalErrors <- err
 		nodeCloser()
 	}
 
-	// process tipsets
-	processTipsets := func() {
-		defer wg.Done()
-
-		throttle := time.NewTicker(l.chainWalkThrottle)
-		defer throttle.Stop()
-
-		for range throttle.C {
-			select {
-			case t := <-tipsetsCh:
-				go processTipset(ctx, l.api, acc, t, time.Now())
-			case <-ctx.Done():
-				return
-			}
-		}
+	// record node info
+	if err := l.recordLotusInfoPoints(ctx, acc); err != nil {
+		fatalErrors <- err
+		nodeCloser()
 	}
-	go processTipsets()
+	log.Println("!D recorded lotus info")
 
-	// process new headers
-	processHeaders := func() {
-		defer wg.Done()
+	// record info about pending messages
+	if err := l.recordMpoolPendingPoints(ctx, acc, chainHead, time.Now()); err != nil {
+		fatalErrors <- err
+		nodeCloser()
+	}
+	log.Println("!D recorded lotus pending message info")
+
+	cctx, closeRpcChans := context.WithCancel(ctx)
+	if err := l.runWorkers(cctx, acc, chainHead, workerDie); err != nil {
+		fatalErrors <- err
+		nodeCloser()
+		closeRpcChans()
+	}
+
+	log.Println("Waiting for a worker to die or for context cancellation")
+	select {
+	case <-ctx.Done():
+		nodeCloser()
+		closeRpcChans()
+		log.Println("Run context canceled")
+		return ctx.Err()
+	case <-workerDie:
+		nodeCloser()
+		closeRpcChans()
+		return fmt.Errorf("A worker died")
+	}
+
+}
+
+// Start begins walking through the chain to update the datastore
+func (l *lotus) Start(acc telegraf.Accumulator) error {
+	if err := l.setDefaults(); err != nil {
+		return err
+	}
+
+	var ctx context.Context
+	ctx, l.shutdown = context.WithCancel(context.Background())
+
+	fatalErrors := make(chan error)
+	go func(ctx context.Context, errChan chan error) {
 		for {
 			select {
-			case head := <-headCh:
-				go processHeader(ctx, acc, head, time.Now())
 			case <-ctx.Done():
 				return
+			case err := <-fatalErrors:
+				log.Println("!E Fatal error received: ", err.Error())
 			}
 		}
-	}
-	go processHeaders()
+	}(ctx, fatalErrors)
 
-	// process new messages
-	processMpoolUpdates := func() {
-		defer wg.Done()
+	go func() {
 		for {
+			workerDie := make(chan struct{})
+			if err := l.run(ctx, acc, fatalErrors, workerDie); err != nil {
+				log.Println("!E Stopped running", "error", err.Error())
+			}
 			select {
-			case mpu := <-msgCh:
-				go processMpoolUpdate(ctx, acc, mpu, time.Now())
 			case <-ctx.Done():
 				return
+			default:
+				continue
 			}
 		}
-	}
-	go processMpoolUpdates()
+	}()
 
 	return nil
 }
 
-func processTipset(ctx context.Context, node api.FullNode, acc telegraf.Accumulator, newTipSet *types.TipSet, receivedAt time.Time) {
+func (l *lotus) Stop() {
+	l.shutdown()
+}
+
+func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumulator) error {
+	nodePeerID, err := l.api.ID(context.Background())
+	if err != nil {
+		return err
+	}
+
+	v, err := l.api.Version(ctx)
+	if err != nil {
+		return err
+	}
+	versionTokens := strings.SplitN(v.Version, "+", 2)
+	version := versionTokens[0]
+	commit := versionTokens[1]
+
+	network, err := l.api.StateNetworkName(ctx)
+	if err != nil {
+		return err
+	}
+
+	acc.AddFields("lotus_info",
+		map[string]interface{}{},
+		map[string]string{
+			"api_version": v.APIVersion.String(),
+			"commit":      commit,
+			"network":     string(network),
+			"peer_id":     nodePeerID.String(),
+			"version":     version,
+		})
+
+	return nil
+}
+
+func (l *lotus) recordMpoolPendingPoints(ctx context.Context, acc telegraf.Accumulator, chainHead *types.TipSet, receivedAt time.Time) error {
+	pendingMsgs, err := l.api.MpoolPending(ctx, chainHead.Key())
+	if err != nil {
+		return err
+	}
+
+	for _, m := range pendingMsgs {
+		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolUpdate, acc telegraf.Accumulator, die chan struct{}) {
+	for {
+		select {
+		case mpu, ok := <-msgCh:
+			if !ok {
+				die <- struct{}{}
+				return
+			}
+			go processMpoolUpdate(ctx, acc, mpu, time.Now())
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.BlockHeader, acc telegraf.Accumulator, die chan struct{}) {
+	// TODO maybe a waitgroup?
+	for {
+		select {
+		case head, ok := <-headCh:
+			if !ok {
+				die <- struct{}{}
+				return
+			}
+			go processHeader(ctx, acc, head, time.Now())
+		case <-ctx.Done():
+			return
+		}
+	}
+
+}
+
+func (l *lotus) processTipSets(ctx context.Context, tipsetsCh <-chan *types.TipSet, acc telegraf.Accumulator, die chan struct{}) {
+	throttle := time.NewTicker(l.chainWalkThrottle)
+	defer throttle.Stop()
+
+	for range throttle.C {
+		select {
+		case t, ok := <-tipsetsCh:
+			if !ok {
+				die <- struct{}{}
+				return
+			}
+			go processTipset(ctx, acc, t, time.Now())
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func processTipset(ctx context.Context, acc telegraf.Accumulator, newTipSet *types.TipSet, receivedAt time.Time) {
 	height := newTipSet.Height()
 
-	if err := recordTipsetMessagesPoints(ctx, node, acc, newTipSet, receivedAt); err != nil {
+	if err := recordTipsetMessagesPoints(ctx, acc, newTipSet, receivedAt); err != nil {
 		log.Println("W! Failed to record messages", "height", height, "error", err)
 		acc.AddError(fmt.Errorf("recording messages from tipset (@%d): %v", height, err))
 		return
 	}
 
-	log.Println("I! Processed tipset height:", height)
+	log.Println("I! Processed tipset height", "height", height)
 }
 
 func processHeader(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) {
@@ -244,7 +373,7 @@ func processHeader(ctx context.Context, acc telegraf.Accumulator, newHeader *typ
 		acc.AddError(fmt.Errorf("recording block header (@%d cid: %s): %v", newHeader.Height, err))
 		return
 	}
-	log.Println("I! Processed block header @ height:", newHeader.Height)
+	log.Println(" I! Processed block header", "height", newHeader.Height)
 }
 
 func processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
@@ -253,10 +382,6 @@ func processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolU
 		acc.AddError(fmt.Errorf("recording mpool update (type: %d, cid: %s): %v", newMpoolUpdate.Type, newMpoolUpdate.Message.Cid(), err))
 		return
 	}
-}
-
-func (l *lotus) Stop() {
-	l.shutdown()
 }
 
 func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {
@@ -278,20 +403,6 @@ func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newH
 			"miner_tag":         newHeader.Miner.String(),
 		},
 		receivedAt)
-	return nil
-}
-
-func recordMpoolPendingPoints(ctx context.Context, lotusAPI api.FullNode, head types.TipSetKey, acc telegraf.Accumulator, receivedAt time.Time) error {
-	pendingMsgs, err := lotusAPI.MpoolPending(context.Background(), head)
-	if err != nil {
-		return err
-	}
-
-	for _, m := range pendingMsgs {
-		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -321,13 +432,7 @@ func recordMpoolUpdatePoints(ctx context.Context, acc telegraf.Accumulator, newM
 	return nil
 }
 
-type msgTag struct {
-	actor    string
-	method   uint64
-	exitcode uint8
-}
-
-func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc telegraf.Accumulator, tipset *types.TipSet, receivedAt time.Time) error {
+func recordTipsetMessagesPoints(ctx context.Context, acc telegraf.Accumulator, tipset *types.TipSet, receivedAt time.Time) error {
 	ts := time.Unix(int64(tipset.MinTimestamp()), int64(0))
 	cids := tipset.Cids()
 	if len(cids) == 0 {
@@ -341,38 +446,6 @@ func recordTipsetMessagesPoints(ctx context.Context, api api.FullNode, acc teleg
 			"block_count":   len(cids),
 		},
 		map[string]string{}, ts)
-
-	return nil
-}
-
-func recordLotusInfoPoints(ctx context.Context, api api.FullNode, acc telegraf.Accumulator) error {
-	nodePeerID, err := api.ID(context.Background())
-	if err != nil {
-		return err
-	}
-
-	v, err := api.Version(ctx)
-	if err != nil {
-		return err
-	}
-	versionTokens := strings.SplitN(v.Version, "+", 2)
-	version := versionTokens[0]
-	commit := versionTokens[1]
-
-	network, err := api.StateNetworkName(ctx)
-	if err != nil {
-		return err
-	}
-
-	acc.AddFields("lotus_info",
-		map[string]interface{}{},
-		map[string]string{
-			"api_version": v.APIVersion.String(),
-			"commit":      commit,
-			"network":     string(network),
-			"peer_id":     nodePeerID.String(),
-			"version":     version,
-		})
 
 	return nil
 }
