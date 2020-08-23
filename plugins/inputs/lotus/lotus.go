@@ -3,7 +3,6 @@ package lotus
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +33,8 @@ type lotus struct {
 	Config_APIListenAddr     string `toml:"lotus_api_multiaddr"`
 	Config_APIToken          string `toml:"lotus_api_token"`
 	Config_ChainWalkThrottle string `toml:"chain_walk_throttle"`
+
+	Log telegraf.Logger
 
 	api               api.FullNode
 	chainWalkThrottle time.Duration
@@ -123,7 +124,7 @@ func (l *lotus) getAPIUsingLotusConfig(ctx context.Context) (api.FullNode, func(
 	return nodeAPI, nodeCloser, nil
 }
 
-func (l *lotus) runWorkers(ctx context.Context, acc telegraf.Accumulator, chainHead *types.TipSet, die chan struct{}) error {
+func (l *lotus) startWorkers(ctx context.Context, acc telegraf.Accumulator, chainHead *types.TipSet, die chan struct{}) error {
 	tipsetsCh, err := rpc.GetTips(ctx, l.api, chainHead.Height(), 3) // closed with consumer
 	if err != nil {
 		return fmt.Errorf("getting tipset notify source: %v", err)
@@ -151,19 +152,17 @@ func (l *lotus) runWorkers(ctx context.Context, acc telegraf.Accumulator, chainH
 }
 
 func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors chan error, workerDie chan struct{}) error {
-	defer close(workerDie)
-
 	var nodeAPI api.FullNode
 	var nodeCloser func()
 	var err error
 
 	// wait for the node to come online
-	nodeCheckPeriod := time.NewTicker(2 * time.Second)
+	nodeCheckPeriod := time.NewTicker(10 * time.Second)
 	for range nodeCheckPeriod.C {
 		nodeAPI, nodeCloser, err = l.getAPIUsingLotusConfig(ctx)
 		if err != nil {
 			if err == repo.ErrNoAPIEndpoint {
-				log.Println("W! Api not online, retrying...")
+				l.Log.Warn("Api not online, retrying...")
 				continue
 			}
 			warnErrors <- err
@@ -181,7 +180,7 @@ func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors ch
 		warnErrors <- fmt.Errorf("Recording lotus info: %v", err)
 		nodeCloser()
 	} else {
-		log.Println("!D Recorded lotus info")
+		l.Log.Debug("Recorded lotus info")
 	}
 
 	// collect the current head
@@ -196,15 +195,16 @@ func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors ch
 		nodeCloser()
 		return fmt.Errorf("Recording pending mpool msgs: %v", err)
 	}
-	log.Println("!D Recorded pending mpool messages")
+	l.Log.Debug("Recorded pending mpool messages")
 
 	cctx, closeRpcChans := context.WithCancel(ctx)
-	if err := l.runWorkers(cctx, acc, chainHead, workerDie); err != nil {
+	if err := l.startWorkers(cctx, acc, chainHead, workerDie); err != nil {
 		nodeCloser()
 		closeRpcChans()
 		return fmt.Errorf("Run workers: %v", err)
 	}
-	log.Println("!D Service workers started")
+
+	l.Log.Info("Service workers started")
 
 	select {
 	case <-ctx.Done():
@@ -216,7 +216,6 @@ func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors ch
 		closeRpcChans()
 		return fmt.Errorf("Service worker datasource closed unexpectedly")
 	}
-
 }
 
 // Start begins walking through the chain to update the datastore
@@ -236,17 +235,30 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 			case <-ctx.Done():
 				return
 			case w := <-warnErrCh:
-				log.Println("!W ", w.Error())
+				l.Log.Warn(w.Error())
 			}
 		}
 	}(ctx, warnErr)
 
 	go func() {
 		for {
-			workerDie := make(chan struct{}) // closed with consumer
-			if err := l.run(ctx, acc, fatalErrors, workerDie); err != nil {
-				log.Println("!E Service Ended Fatally:", err.Error())
+			// workerDie can recieve from all workers, ensure
+			// channel buffers all recieves and doesn't block
+			workerDie := make(chan struct{}, 3)
+			defer func() {
+				// drain and close channel
+				for {
+					select {
+					case <-workerDie:
+					default:
+						close(workerDie)
+					}
+				}
+			}()
+			if err := l.run(ctx, acc, warnErr, workerDie); err != nil {
+				l.Log.Errorf("Service ended fatally: %v", err)
 			}
+
 			select {
 			case <-ctx.Done():
 				return
@@ -310,8 +322,6 @@ func (l *lotus) recordMpoolPendingPoints(ctx context.Context, acc telegraf.Accum
 }
 
 func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolUpdate, acc telegraf.Accumulator, die chan struct{}) {
-	defer close(msgCh)
-
 	for {
 		select {
 		case mpu, ok := <-msgCh:
@@ -319,7 +329,7 @@ func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolU
 				die <- struct{}{}
 				return
 			}
-			go processMpoolUpdate(ctx, acc, mpu, time.Now())
+			go l.processMpoolUpdate(ctx, acc, mpu, time.Now())
 		case <-ctx.Done():
 			return
 		}
@@ -327,8 +337,6 @@ func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolU
 }
 
 func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.BlockHeader, acc telegraf.Accumulator, die chan struct{}) {
-	defer close(headCh)
-
 	// TODO maybe a waitgroup?
 	for {
 		select {
@@ -337,7 +345,7 @@ func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.Bl
 				die <- struct{}{}
 				return
 			}
-			go processHeader(ctx, acc, head, time.Now())
+			go l.processHeader(ctx, acc, head, time.Now())
 		case <-ctx.Done():
 			return
 		}
@@ -346,8 +354,6 @@ func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.Bl
 }
 
 func (l *lotus) processTipSets(ctx context.Context, tipsetsCh <-chan *types.TipSet, acc telegraf.Accumulator, die chan struct{}) {
-	defer close(tipsetsCh)
-
 	throttle := time.NewTicker(l.chainWalkThrottle)
 	defer throttle.Stop()
 
@@ -358,41 +364,44 @@ func (l *lotus) processTipSets(ctx context.Context, tipsetsCh <-chan *types.TipS
 				die <- struct{}{}
 				return
 			}
-			go processTipset(ctx, acc, t, time.Now())
+			go l.processTipset(ctx, acc, t, time.Now())
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func processTipset(ctx context.Context, acc telegraf.Accumulator, newTipSet *types.TipSet, receivedAt time.Time) {
+func (l *lotus) processTipset(ctx context.Context, acc telegraf.Accumulator, newTipSet *types.TipSet, receivedAt time.Time) {
 	height := newTipSet.Height()
 
 	if err := recordTipsetMessagesPoints(ctx, acc, newTipSet, receivedAt); err != nil {
-		log.Println("W! Failed to record messages", "height", height, "error", err)
-		acc.AddError(fmt.Errorf("recording messages from tipset (@%d): %v", height, err))
+		err = fmt.Errorf("Recording tipset (h: %d): %v", height, err)
+		acc.AddError(err)
+		l.Log.Warn(err.Error())
 		return
 	}
-
-	log.Println("I! Processed tipset height", "height", height)
+	l.Log.Debugf("Recorded tipset (h: %d)", height)
 }
 
-func processHeader(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) {
+func (l *lotus) processHeader(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) {
 	err := recordBlockHeaderPoints(ctx, acc, newHeader, receivedAt)
 	if err != nil {
-		log.Println("W! Failed to record block header", "height", newHeader.Height, "error", err)
-		acc.AddError(fmt.Errorf("recording block header (@%d cid: %s): %v", newHeader.Height, err))
+		err = fmt.Errorf("Recording block header (h: %d): %v", newHeader.Height, err)
+		acc.AddError(err)
+		l.Log.Warn(err.Error())
 		return
 	}
-	log.Println(" I! Processed block header", "height", newHeader.Height)
+	l.Log.Debugf("Recorded block header (h: %d)", newHeader.Height)
 }
 
-func processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
+func (l *lotus) processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
 	if err := recordMpoolUpdatePoints(ctx, acc, newMpoolUpdate, receivedAt); err != nil {
-		log.Println("W! Failed to record mpool update", "msg", newMpoolUpdate.Message.Cid().String(), "type", newMpoolUpdate.Type, "error", err.Error())
-		acc.AddError(fmt.Errorf("recording mpool update (type: %d, cid: %s): %v", newMpoolUpdate.Type, newMpoolUpdate.Message.Cid(), err))
+		err = fmt.Errorf("Recording mpool update (cid: %s, type: %s): %v", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type, err)
+		acc.AddError(err)
+		l.Log.Warn(err.Error())
 		return
 	}
+	l.Log.Debugf("Recorded mpool update (cid: %s, type: %s)", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type)
 }
 
 func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {

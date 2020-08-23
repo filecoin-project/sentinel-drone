@@ -57,7 +57,6 @@ func GetTips(ctx context.Context, api api.FullNode, lastHeight abi.ChainEpoch, h
 					}
 				}
 			case <-ctx.Done():
-				log.Error("GetTipSet Shutting down")
 				return
 			}
 		}
