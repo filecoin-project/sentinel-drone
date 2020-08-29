@@ -295,7 +295,9 @@ func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumula
 	}
 
 	acc.AddFields("lotus_info",
-		map[string]interface{}{},
+		map[string]interface{}{
+		"nothing": 0,
+		},
 		map[string]string{
 			"api_version": v.APIVersion.String(),
 			"commit":      commit,
