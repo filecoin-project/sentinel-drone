@@ -107,14 +107,14 @@ func (l *lotus) getAPIUsingLotusConfig(ctx context.Context) (api.FullNode, func(
 		nodeCloser func()
 	)
 	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
-		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(ctx, l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
 			return nil, nil, err
 		}
 		nodeAPI = lotusAPI
 		nodeCloser = apiCloser
 	} else {
-		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(ctx, l.Config_DataPath)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -296,7 +296,7 @@ func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumula
 
 	acc.AddFields("lotus_info",
 		map[string]interface{}{
-		"nothing": 0,
+			"nothing": 0,
 		},
 		map[string]string{
 			"api_version": v.APIVersion.String(),

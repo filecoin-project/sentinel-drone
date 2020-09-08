@@ -2,7 +2,7 @@ package rpc
 
 import (
 	"context"
-	"github.com/filecoin-project/specs-actors/actors/abi"
+	"github.com/filecoin-project/go-state-types/abi"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 	"net/http"
@@ -95,7 +95,7 @@ func loadTipsets(ctx context.Context, api api.FullNode, curr *types.TipSet, lowe
 	return tipsets, nil
 }
 
-func GetFullNodeAPIUsingCredentials(listenAddr, token string) (api.FullNode, jsonrpc.ClientCloser, error) {
+func GetFullNodeAPIUsingCredentials(ctx context.Context, listenAddr, token string) (api.FullNode, jsonrpc.ClientCloser, error) {
 	parsedAddr, err := ma.NewMultiaddr(listenAddr)
 	if err != nil {
 		return nil, nil, err
@@ -106,16 +106,16 @@ func GetFullNodeAPIUsingCredentials(listenAddr, token string) (api.FullNode, jso
 		return nil, nil, err
 	}
 
-	return client.NewFullNodeRPC(apiURI(addr), apiHeaders(token))
+	return client.NewFullNodeRPC(ctx, apiURI(addr), apiHeaders(token))
 }
 
-func GetFullNodeAPI(repo string) (api.FullNode, jsonrpc.ClientCloser, error) {
+func GetFullNodeAPI(ctx context.Context, repo string) (api.FullNode, jsonrpc.ClientCloser, error) {
 	addr, headers, err := getAPI(repo)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return client.NewFullNodeRPC(addr, headers)
+	return client.NewFullNodeRPC(ctx, addr, headers)
 }
 
 func getAPI(path string) (string, http.Header, error) {
