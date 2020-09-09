@@ -74,7 +74,7 @@ func (l *LotusPeerIDTagger) setAPIConfigDefaults() {
 }
 
 func (l *LotusPeerIDTagger) setPeerID() error {
-	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig()
+	nodeAPI, nodeCloser, err := l.getAPIUsingLotusConfig(context.Background())
 	if err != nil {
 		return err
 	}
@@ -95,13 +95,13 @@ func (l *LotusPeerIDTagger) setExcludeMap() {
 	l.excludeMap = ex
 }
 
-func (l *LotusPeerIDTagger) getAPIUsingLotusConfig() (api.FullNode, func(), error) {
+func (l *LotusPeerIDTagger) getAPIUsingLotusConfig(ctx context.Context) (api.FullNode, func(), error) {
 	var (
 		nodeAPI    api.FullNode
 		nodeCloser func()
 	)
 	if len(l.Config_APIListenAddr) > 0 && len(l.Config_APIToken) > 0 {
-		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(l.Config_APIListenAddr, l.Config_APIToken)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPIUsingCredentials(ctx, l.Config_APIListenAddr, l.Config_APIToken)
 		if err != nil {
 			err = fmt.Errorf("connect with credentials: %v", err)
 			return nil, nil, err
@@ -109,7 +109,7 @@ func (l *LotusPeerIDTagger) getAPIUsingLotusConfig() (api.FullNode, func(), erro
 		nodeAPI = lotusAPI
 		nodeCloser = apiCloser
 	} else {
-		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(l.Config_DataPath)
+		lotusAPI, apiCloser, err := rpc.GetFullNodeAPI(ctx, l.Config_DataPath)
 		if err != nil {
 			err = fmt.Errorf("connect from lotus state: %v", err)
 			return nil, nil, err
