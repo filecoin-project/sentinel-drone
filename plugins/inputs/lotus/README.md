@@ -32,27 +32,49 @@ generate it using `telegraf --usage lotus`.
 	chain_walk_throttle = "1s"
 ```
 
-### Metrics (TODO)
-Here you should add an optional description and links to where the user can
-get more information about the measurements.
+### Metrics
 
-If the output is determined dynamically based on the input source, or there
-are more metrics than can reasonably be listed, describe how the input is
-mapped to the output.
-
-- measurement1
+- lotus_info
   - tags:
-    - tag1 (optional description)
-    - tag2
+    - api_version (version of the rpc protocol supported by the lotus node)
+    - commit (git commit of the lotus node)
+    - network (the name of the network the lotus node is synced to)
+    - peer_id (lotus node's libp2p PeerID)
+    - version (version of the lotus node)
   - fields:
-    - field1 (type, unit)
-    - field2 (float, percent)
+    - nothing (type, unit)
 
-- measurement2
+- chain_block
   - tags:
-    - tag3
+    - peer_id (lotus node's libp2p PeerID)
+    - header_cid_tag
+    - tipset_height_tag
+    - miner_tag
   - fields:
-    - field3 (integer, bytes)
+    - tipset_height (height/epoch of the tipset, integer)
+    - election (integer)
+    - header_size (size of the block header, integer, bytes)
+    - header_timestamp (timestamp of the block header, integer, nanoseconds)
+    - recorded_at (timestamp of when the chain block was read, integer, nanoseconds) 
+
+- chain_mpool
+  - tags:
+    - peer_id (lotus node's libp2p PeerID)
+    - message_cid_tag (cid of the message)
+    - mpool_update_type_tag (type of message: add, rm, init)
+  - fields:
+    - message_size (size of the message, integer, bytes)
+    - recorded_at (timestamp of when the chain block was read, integer, nanoseconds) 
+
+- chain_tipset
+  - tags:
+    - peer_id (lotus node's libp2p PeerID)
+  - fields:
+    - tipset_height (height/epoch of the tipset, integer)
+    - block_count (number of blocks in tipset, integer)
+    - recorded_at (timestamp of when the chain block was read, integer, nanoseconds) 
+
+
 
 ### Sample Queries (TODO)
 
