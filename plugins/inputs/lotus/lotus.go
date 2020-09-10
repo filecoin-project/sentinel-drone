@@ -151,7 +151,7 @@ func (l *lotus) startWorkers(ctx context.Context, acc telegraf.Accumulator, chai
 	return nil
 }
 
-func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors chan error, workerDie chan struct{}) error {
+func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors chan error) error {
 	var nodeAPI api.FullNode
 	var nodeCloser func()
 	var err error
@@ -175,46 +175,47 @@ func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors ch
 	// great we're online, lets get to work
 	l.api = nodeAPI
 
+	// Ensure the connection to the node is closed when we are done.
+	defer nodeCloser()
+
 	// record node info
 	if err := l.recordLotusInfoPoints(ctx, acc); err != nil {
-		warnErrors <- fmt.Errorf("Recording lotus info: %v", err)
-		nodeCloser()
-	} else {
-		l.Log.Debug("Recorded lotus info")
+		return fmt.Errorf("Recording lotus info: %w", err)
 	}
+
+	l.Log.Debug("Recorded lotus info")
 
 	// collect the current head
 	chainHead, err := l.api.ChainHead(ctx)
 	if err != nil {
-		nodeCloser()
-		return fmt.Errorf("Getting latest chainhead: %v", err)
+		return fmt.Errorf("Getting latest chainhead: %w", err)
 	}
 
 	// record info about pending messages
 	if err := l.recordMpoolPendingPoints(ctx, acc, chainHead, time.Now()); err != nil {
-		nodeCloser()
-		return fmt.Errorf("Recording pending mpool msgs: %v", err)
+		return fmt.Errorf("Recording pending mpool msgs: %w", err)
 	}
 	l.Log.Debug("Recorded pending mpool messages")
 
+	// This derived context allows us to notify workers to terminate when this function exits
 	cctx, closeRpcChans := context.WithCancel(ctx)
+	defer closeRpcChans()
+
+	// A worker sends on workerDie to signal that it has failed
+	workerDie := make(chan struct{}, 3)
+
 	if err := l.startWorkers(cctx, acc, chainHead, workerDie); err != nil {
-		nodeCloser()
-		closeRpcChans()
 		return fmt.Errorf("Run workers: %v", err)
 	}
 
 	l.Log.Info("Service workers started")
 
+	// Wait for context to be cancelled or a worker to die
 	select {
 	case <-ctx.Done():
-		nodeCloser()
-		closeRpcChans()
 		return ctx.Err()
 	case <-workerDie:
-		nodeCloser()
-		closeRpcChans()
-		return fmt.Errorf("Service worker datasource closed unexpectedly")
+		return fmt.Errorf("Service worker closed unexpectedly")
 	}
 }
 
@@ -228,6 +229,8 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	ctx, l.shutdown = context.WithCancel(context.Background())
 
 	warnErr := make(chan error) // closed with consumer
+
+	// Goroutine to log errors emitted by workers
 	go func(ctx context.Context, warnErrCh chan error) {
 		defer close(warnErrCh)
 		for {
@@ -240,22 +243,10 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		}
 	}(ctx, warnErr)
 
-	go func() {
+	// Gather metrics until the context is cancelled, restarting if fatal error encountered
+	go func(ctx context.Context, warnErrCh chan error, acc telegraf.Accumulator) {
 		for {
-			// workerDie can recieve from all workers, ensure
-			// channel buffers all recieves and doesn't block
-			workerDie := make(chan struct{}, 3)
-			defer func() {
-				// drain and close channel
-				for {
-					select {
-					case <-workerDie:
-					default:
-						close(workerDie)
-					}
-				}
-			}()
-			if err := l.run(ctx, acc, warnErr, workerDie); err != nil {
+			if err := l.run(ctx, acc, warnErrCh); err != nil {
 				l.Log.Errorf("Service ended fatally: %v", err)
 			}
 
@@ -266,13 +257,15 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 				continue
 			}
 		}
-	}()
+	}(ctx, warnErr, acc)
 
 	return nil
 }
 
 func (l *lotus) Stop() {
-	l.shutdown()
+	if l.shutdown != nil {
+		l.shutdown()
+	}
 }
 
 func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumulator) error {
@@ -339,7 +332,6 @@ func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolU
 }
 
 func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.BlockHeader, acc telegraf.Accumulator, die chan struct{}) {
-	// TODO maybe a waitgroup?
 	for {
 		select {
 		case head, ok := <-headCh:
@@ -398,7 +390,7 @@ func (l *lotus) processHeader(ctx context.Context, acc telegraf.Accumulator, new
 
 func (l *lotus) processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
 	if err := recordMpoolUpdatePoints(ctx, acc, newMpoolUpdate, receivedAt); err != nil {
-		err = fmt.Errorf("Recording mpool update (cid: %s, type: %s): %v", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type, err)
+		err = fmt.Errorf("Recording mpool update (cid: %s, type: %d): %v", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type, err)
 		acc.AddError(err)
 		l.Log.Warn(err.Error())
 		return
