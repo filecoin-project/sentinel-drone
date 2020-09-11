@@ -67,7 +67,7 @@ telegraf: deps
 	go build -ldflags "$(LDFLAGS)" ./cmd/telegraf
 
 .PHONY: go-install
-go-install:
+go-install: deps
 	go install -ldflags "-w -s $(LDFLAGS)" ./cmd/telegraf
 
 .PHONY: install
@@ -155,7 +155,7 @@ clean:
 
 .PHONY: docker-image
 docker-image:
-	docker build -f scripts/stretch.docker -t "telegraf:$(COMMIT)" .
+	docker build -t "sentinel-drone:$(COMMIT)" .
 
 plugins/parsers/influx/machine.go: plugins/parsers/influx/machine.go.rl
 	ragel -Z -G2 $^ -o $@
