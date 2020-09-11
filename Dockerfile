@@ -9,8 +9,10 @@ WORKDIR /go/src/github.com/influxdata/telegraf
 COPY . /go/src/github.com/influxdata/telegraf
 RUN make go-install
 
-FROM buildpack-deps:stretch-curl
+FROM buildpack-deps:buster-curl
 COPY --from=builder /go/bin/* /usr/bin/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libOpenCL.so* /lib/
+
 COPY etc/telegraf.conf /etc/telegraf/telegraf.conf
 
 EXPOSE 8125/udp 8092/udp 8094

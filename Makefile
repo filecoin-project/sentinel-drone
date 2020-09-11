@@ -155,7 +155,8 @@ clean:
 
 .PHONY: docker-image
 docker-image:
-	docker build -t "sentinel-drone:$(COMMIT)" .
+	docker build -t "sentinel-drone" .
+	docker tag "sentinel-drone:latest" "sentinel-drone:$(COMMIT)"
 
 plugins/parsers/influx/machine.go: plugins/parsers/influx/machine.go.rl
 	ragel -Z -G2 $^ -o $@
