@@ -41,8 +41,9 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/ericchiang/k8s v1.2.0
 	github.com/filecoin-project/go-jsonrpc v0.1.2-0.20200822201400-474f4fdccc52
-	github.com/filecoin-project/go-state-types v0.0.0-20200905071437-95828685f9df
-	github.com/filecoin-project/lotus v0.6.2-0.20200908160324-3697a1af4d3d
+	github.com/filecoin-project/go-state-types v0.0.0-20200909080127-001afaca718c
+	github.com/filecoin-project/lotus v0.7.0
+	github.com/filecoin-project/test-vectors v0.0.0-20200907193218-2c0739eccce6 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/glinton/ping v0.1.4-0.20200311211934-5ac87da8cd96
 	github.com/go-logfmt/logfmt v0.5.0
