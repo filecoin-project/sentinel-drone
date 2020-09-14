@@ -9,7 +9,9 @@ WORKDIR /go/src/github.com/influxdata/telegraf
 COPY . /go/src/github.com/influxdata/telegraf
 RUN make go-install
 
+# Updated from stretch to buster, fixes incorrect glib version error from filecoin-ffi build
 FROM buildpack-deps:buster-curl
+# Grab the things
 COPY --from=builder /go/bin/* /usr/bin/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libOpenCL.so* /lib/
 
