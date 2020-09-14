@@ -17,6 +17,7 @@ import (
 const (
 	DefaultConfig_DataPath      = "${HOME}/.lotus"
 	DefaultConfig_APIListenAddr = "/ip4/0.0.0.0/tcp/1234"
+	PeerIDTagName               = "peer_id"
 )
 
 var sampleConfig = fmt.Sprintf(`
@@ -34,7 +35,7 @@ var sampleConfig = fmt.Sprintf(`
 	## and api_token. This value is ignored if lotus_api_* values are populated.
 	## Default: "%[2]s"
 	lotus_datapath = "%[2]s"
-	
+
 	## Provide the measurments that should be excluded from receiving a peer_id tag.
 	# exclude = [
 		tag_name_to_exclude,
@@ -153,7 +154,7 @@ func (l *LotusPeerIDTagger) Apply(in ...telegraf.Metric) []telegraf.Metric {
 
 	for _, point := range in {
 		if _, exclude := l.excludeMap[point.Name()]; !exclude {
-			point.AddTag("peer_id", l.peerID.String())
+			point.AddTag(PeerIDTagName, l.peerID.String())
 		}
 	}
 	return in
