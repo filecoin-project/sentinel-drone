@@ -1,6 +1,6 @@
 # Sentinel Drone
 
-> Metrics agent for Lotus 
+> Telegraf metrics agent for Lotus
 
 [![build status](https://circleci.com/gh/filecoin-project/sentinel-drone.svg?style=svg)](https://app.circleci.com/pipelines/github/filecoin-project/sentinel-drone)
 
@@ -33,7 +33,7 @@ Telegraf shares the same [minimum requirements][] as Go:
 Telegraf requires Go version 1.12 or newer, the Makefile requires GNU make.
 
 1. [Install Go](https://golang.org/doc/install) >=1.12 (1.13 recommended)
-2. Clone the Telegraf repository: `git clone https://github.com/filecoin-shipyard/sentinel-drone.git`
+2. Clone the repository: `git clone https://github.com/filecoin-project/sentinel-drone.git`
 3. Run `make` from the source directory
 
 ## How to use it:
