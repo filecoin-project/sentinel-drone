@@ -29,7 +29,7 @@ func TestTagMetricWithPeerID(t *testing.T) {
 
 	p := LotusPeerIDTagger{
 		peerID: pid, // setting the peerID causes LotusPeerIDTagger to skip api init allowing Apply to be called
-		Config_Excluded:             []Exclude{
+		Config_Excluded: []Exclude{
 			{Measurement: "bar"}, // we will ignore measures with this name
 		},
 	}
@@ -37,11 +37,11 @@ func TestTagMetricWithPeerID(t *testing.T) {
 	includeM := newMetric("foo", map[string]string{"hostname": "localhost", "region": "earth"}, nil)
 	result := p.Apply(includeM)
 	require.Len(t, result, 1)
-	assert.Equal(t, map[string]string{"hostname": "localhost", "region": "earth", "lotus_peer_id": pid.String()},result[0].Tags())
+	assert.Equal(t, map[string]string{"hostname": "localhost", "region": "earth", "lotus_peer_id": pid.String()}, result[0].Tags())
 
 	excludeM := newMetric("bar", map[string]string{"hostname": "localhost", "region": "earth"}, nil)
 	result = p.Apply(excludeM)
 	require.Len(t, result, 1)
-	assert.Equal(t, map[string]string{"hostname": "localhost", "region": "earth"},result[0].Tags())
+	assert.Equal(t, map[string]string{"hostname": "localhost", "region": "earth"}, result[0].Tags())
 
 }
