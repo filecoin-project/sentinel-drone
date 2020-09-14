@@ -2,6 +2,8 @@
 
 > Metrics agent for Lotus 
 
+[![build status](https://circleci.com/gh/filecoin-project/sentinel-drone.svg?style=svg)](https://app.circleci.com/pipelines/github/filecoin-project/sentinel-drone)
+
 **Sentinel Drone** is a fork of Telegraf with input and processing plugins for Lotus, and the postgres output plugin. It's deployed as part of [Sentinel](https://github.com/filecoin-project/sentinel), the Filecoin Network Monitoring and Analysis System. 
 
 **Telegraf** is an agent for collecting and writing metrics see https://github.com/influxdata/telegraf/
