@@ -103,8 +103,8 @@ test-windows:
 
 .PHONY: vet
 vet:
-	@echo 'go vet $$(go list ./... | grep -v ./plugins/parsers/influx)'
-	@go vet $$(go list ./... | grep -v ./plugins/parsers/influx) ; if [ $$? -ne 0 ]; then \
+	@echo 'go vet $$(go list ./... | grep -v ./plugins/parsers/influx | grep -v ./plugins/serializers/prometheus)'
+	@go vet $$(go list ./... | grep -v ./plugins/parsers/influx | grep -v ./plugins/serializers/prometheus) ; if [ $$? -ne 0 ]; then \
 		echo ""; \
 		echo "go vet has found suspicious constructs. Please remediate any reported errors"; \
 		echo "to fix them before submitting code for review."; \

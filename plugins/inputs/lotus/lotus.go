@@ -309,7 +309,7 @@ func (l *lotus) recordMpoolPendingPoints(ctx context.Context, acc telegraf.Accum
 	}
 
 	for _, m := range pendingMsgs {
-		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{MpoolBootstrap, m}, receivedAt); err != nil {
+		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{Type: MpoolBootstrap, Message: m}, receivedAt); err != nil {
 			return err
 		}
 	}
