@@ -19,6 +19,8 @@ jobs:
     executor: golang
     steps:
       - checkout
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y jq mesa-opencl-icd ocl-icd-opencl-dev
       - restore_cache:
           key: go-mod-v1-{{ checksum "go.sum" }}
       - run: 'make deps'
@@ -45,11 +47,11 @@ jobs:
             docker build -t $IMAGE_NAME:$WIP_IMAGE_TAG .
       - run:
           name: Archive Docker image
-          command: docker save -o $IMAGE_NAME.tar $IMAGE_NAME
+          command: docker save -o docker-image.tar $IMAGE_NAME
       - persist_to_workspace:
           root: .
           paths:
-            - ./$IMAGE_NAME.tar
+            - ./docker-image.tar
 
 workflows:
   version: 2
