@@ -1,0 +1,54 @@
+version: 2.1
+
+executors:
+  golang:
+    docker:
+      - image: 'quay.io/influxdb/telegraf-ci:1.13.8'
+    working_directory: '/go/src/github.com/influxdata/telegraf'
+    environment:
+      GOFLAGS: -p=8
+  dockerizer:
+    docker:
+      - image: circleci/golang:1.14.4
+    environment:
+      IMAGE_NAME: filecoin/sentinel-drone
+      WIP_IMAGE_TAG: wip
+
+jobs:
+  test:
+    executor: golang
+    steps:
+      - checkout
+      - run: apt-get update
+      - run: apt-get install -y jq mesa-opencl-icd ocl-icd-opencl-dev
+      - restore_cache:
+          key: go-mod-v1-{{ checksum "go.sum" }}
+      - run: 'make deps'
+      - run: 'make tidy'
+      - save_cache:
+          name: 'go module cache'
+          key: go-mod-v1-{{ checksum "go.sum" }}
+          paths:
+            - '/go/pkg/mod'
+      - run: 'make'
+      - run: 'make check'
+      - run: 'make check-deps'
+      - run: 'make test'
+
+  docker-build:
+    executor: dockerizer
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: "18.09.3"
+      - run:
+          name: Build Docker image
+          command: |
+            docker build -t $IMAGE_NAME:$WIP_IMAGE_TAG .
+
+workflows:
+  version: 2
+  check:
+    jobs:
+      - test
+      - docker-build
