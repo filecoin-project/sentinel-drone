@@ -22,12 +22,6 @@ const (
 	DefaultConfig_ChainWalkThrottle = "1s"
 )
 
-const (
-	MpoolBootstrap = -1
-	MpoolAdd       = api.MpoolAdd
-	MpoolRemove    = api.MpoolRemove
-)
-
 type lotus struct {
 	Config_DataPath          string `toml:"lotus_datapath"`
 	Config_APIListenAddr     string `toml:"lotus_api_multiaddr"`
@@ -135,18 +129,11 @@ func (l *lotus) startWorkers(ctx context.Context, acc telegraf.Accumulator, chai
 		return fmt.Errorf("getting blocks notify source: %v", err)
 	}
 
-	msgCh, err := l.api.MpoolSub(ctx) // closed with consumer
-	if err != nil {
-		return fmt.Errorf("getting mpool notify source: %v", err)
-	}
 	// process new tipsets
 	go l.processTipSets(ctx, tipsetsCh, acc, die)
 
 	// process new headers
 	go l.processBlockHeaders(ctx, headCh, acc, die)
-
-	// process new messages
-	go l.processMpoolUpdates(ctx, msgCh, acc, die)
 
 	return nil
 }
@@ -191,18 +178,12 @@ func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors ch
 		return fmt.Errorf("Getting latest chainhead: %w", err)
 	}
 
-	// record info about pending messages
-	if err := l.recordMpoolPendingPoints(ctx, acc, chainHead, time.Now()); err != nil {
-		return fmt.Errorf("Recording pending mpool msgs: %w", err)
-	}
-	l.Log.Debug("Recorded pending mpool messages")
-
 	// This derived context allows us to notify workers to terminate when this function exits
 	cctx, closeRpcChans := context.WithCancel(ctx)
 	defer closeRpcChans()
 
 	// A worker sends on workerDie to signal that it has failed
-	workerDie := make(chan struct{}, 3)
+	workerDie := make(chan struct{}, 2)
 
 	if err := l.startWorkers(cctx, acc, chainHead, workerDie); err != nil {
 		return fmt.Errorf("Run workers: %v", err)
@@ -302,35 +283,6 @@ func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumula
 	return nil
 }
 
-func (l *lotus) recordMpoolPendingPoints(ctx context.Context, acc telegraf.Accumulator, chainHead *types.TipSet, receivedAt time.Time) error {
-	pendingMsgs, err := l.api.MpoolPending(ctx, chainHead.Key())
-	if err != nil {
-		return err
-	}
-
-	for _, m := range pendingMsgs {
-		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{Type: MpoolBootstrap, Message: m}, receivedAt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolUpdate, acc telegraf.Accumulator, die chan struct{}) {
-	for {
-		select {
-		case mpu, ok := <-msgCh:
-			if !ok {
-				die <- struct{}{}
-				return
-			}
-			go l.processMpoolUpdate(ctx, acc, mpu, time.Now())
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.BlockHeader, acc telegraf.Accumulator, die chan struct{}) {
 	for {
 		select {
@@ -388,16 +340,6 @@ func (l *lotus) processHeader(ctx context.Context, acc telegraf.Accumulator, new
 	l.Log.Debugf("Recorded block header (h: %d)", newHeader.Height)
 }
 
-func (l *lotus) processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
-	if err := recordMpoolUpdatePoints(ctx, acc, newMpoolUpdate, receivedAt); err != nil {
-		err = fmt.Errorf("Recording mpool update (cid: %s, type: %d): %v", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type, err)
-		acc.AddError(err)
-		l.Log.Warn(err.Error())
-		return
-	}
-	l.Log.Debugf("Recorded mpool update (cid: %s, type: %s)", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type)
-}
-
 func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {
 	bs, err := newHeader.Serialize()
 	if err != nil {
@@ -415,32 +357,6 @@ func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newH
 			"header_cid_tag":    newHeader.Cid().String(),
 			"tipset_height_tag": strconv.Itoa(int(newHeader.Height)),
 			"miner_tag":         newHeader.Miner.String(),
-		},
-		receivedAt)
-	return nil
-}
-
-func recordMpoolUpdatePoints(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) error {
-	var updateType string
-	switch newMpoolUpdate.Type {
-	case MpoolAdd:
-		updateType = "add"
-	case MpoolRemove:
-		updateType = "rm"
-	case MpoolBootstrap:
-		updateType = "init"
-	default:
-		return fmt.Errorf("unknown mpool update type: %v", newMpoolUpdate.Type)
-	}
-
-	acc.AddFields("chain_mpool",
-		map[string]interface{}{
-			"message_size": newMpoolUpdate.Message.Size(),
-			"recorded_at":  receivedAt.UnixNano(),
-		},
-		map[string]string{
-			"message_cid_tag":       newMpoolUpdate.Message.Cid().String(),
-			"mpool_update_type_tag": updateType,
 		},
 		receivedAt)
 	return nil
