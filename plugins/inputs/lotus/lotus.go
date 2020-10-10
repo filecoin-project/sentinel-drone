@@ -3,7 +3,6 @@ package lotus
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -268,7 +267,7 @@ func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumula
 		return err
 	}
 
-	acc.AddFields("lotus_info",
+	acc.AddFields("observed_info",
 		map[string]interface{}{
 			"nothing": 0,
 		},
@@ -341,22 +340,14 @@ func (l *lotus) processHeader(ctx context.Context, acc telegraf.Accumulator, new
 }
 
 func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {
-	bs, err := newHeader.Serialize()
-	if err != nil {
-		return err
-	}
-	acc.AddFields("chain_block",
+	acc.AddFields("observed_headers",
 		map[string]interface{}{
 			"tipset_height":    newHeader.Height,
-			"election":         1,
-			"header_size":      len(bs),
-			"header_timestamp": time.Unix(int64(newHeader.Timestamp), 0).UnixNano(),
-			"recorded_at":      receivedAt.UnixNano(),
+			"header_timestamp": time.Unix(int64(newHeader.Timestamp), 0).Unix(),
 		},
 		map[string]string{
-			"header_cid_tag":    newHeader.Cid().String(),
-			"tipset_height_tag": strconv.Itoa(int(newHeader.Height)),
-			"miner_tag":         newHeader.Miner.String(),
+			"header_cid": newHeader.Cid().String(),
+			"miner_id":   newHeader.Miner.String(),
 		},
 		receivedAt)
 	return nil
@@ -369,13 +360,15 @@ func recordTipsetMessagesPoints(ctx context.Context, acc telegraf.Accumulator, t
 		return fmt.Errorf("no cids in tipset")
 	}
 
-	acc.AddFields("chain_tipset",
+	acc.AddFields("observed_tipsets",
 		map[string]interface{}{
-			"recorded_at":   receivedAt.UnixNano(),
 			"tipset_height": int(tipset.Height()),
 			"block_count":   len(cids),
+			"recorded_at":   receivedAt.UnixNano(),
 		},
-		map[string]string{}, ts)
+		map[string]string{
+			"tipset_key": tipset.Key().String(),
+		}, ts)
 
 	return nil
 }
