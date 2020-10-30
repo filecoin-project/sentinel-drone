@@ -340,14 +340,21 @@ func (l *lotus) processHeader(ctx context.Context, acc telegraf.Accumulator, new
 }
 
 func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {
+	var parentBlocks = ""
+	for _, cid := range newHeader.Parents {
+		parentBlocks += cid.String() + ","
+	}
 	acc.AddFields("observed_headers",
 		map[string]interface{}{
 			"tipset_height":    newHeader.Height,
 			"header_timestamp": time.Unix(int64(newHeader.Timestamp), 0).Unix(),
 		},
 		map[string]string{
-			"header_cid": newHeader.Cid().String(),
-			"miner_id":   newHeader.Miner.String(),
+			"header_cid":        newHeader.Cid().String(),
+			"miner_id":          newHeader.Miner.String(),
+			"parent_state_root": newHeader.ParentStateRoot.String(),
+			"parent_weight":     newHeader.ParentWeight.String(),
+			"parents":           parentBlocks,
 		},
 		receivedAt)
 	return nil
