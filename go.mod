@@ -41,9 +41,9 @@ require (
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20181012153825-d7b61745d166
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/ericchiang/k8s v1.2.0
-	github.com/filecoin-project/go-jsonrpc v0.1.2-0.20200822201400-474f4fdccc52
-	github.com/filecoin-project/go-state-types v0.0.0-20200928172055-2df22083d8ab
-	github.com/filecoin-project/lotus v0.9.0
+	github.com/filecoin-project/go-jsonrpc v0.1.2-0.20201008195726-68c6a2704e49
+	github.com/filecoin-project/go-state-types v0.0.0-20201013222834-41ea465f274f
+	github.com/filecoin-project/lotus v1.1.2
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/glinton/ping v0.1.4-0.20200311211934-5ac87da8cd96
 	github.com/go-logfmt/logfmt v0.5.0
@@ -57,7 +57,7 @@ require (
 	github.com/golang/geo v0.0.0-20190916061304-5b978397cfec
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/protobuf v1.4.2
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.5.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/gorilla/mux v1.7.4
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
@@ -82,7 +82,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353 // indirect
 	github.com/libp2p/go-libp2p-core v0.6.1
-	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1
 	github.com/mdlayher/apcupsd v0.0.0-20190314144147-eb3dd99a75fe
 	github.com/miekg/dns v1.1.31
@@ -123,7 +122,7 @@ require (
 	github.com/yuin/gopher-lua v0.0.0-20180630135845-46796da1b0b4 // indirect
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20200602225109-6fdc65e7d980
+	golang.org/x/sys v0.0.0-20200926100807-9d91bd62050c
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20200205215550-e35592f146e4
 	gonum.org/v1/gonum v0.6.2 // indirect
 	google.golang.org/api v0.25.0
