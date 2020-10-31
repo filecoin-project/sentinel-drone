@@ -3,7 +3,6 @@ package lotus
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,12 +19,6 @@ const (
 	DefaultConfig_DataPath          = "${HOME}/.lotus"
 	DefaultConfig_APIListenAddr     = "/ip4/0.0.0.0/tcp/1234"
 	DefaultConfig_ChainWalkThrottle = "1s"
-)
-
-const (
-	MpoolBootstrap = -1
-	MpoolAdd       = api.MpoolAdd
-	MpoolRemove    = api.MpoolRemove
 )
 
 type lotus struct {
@@ -135,18 +128,11 @@ func (l *lotus) startWorkers(ctx context.Context, acc telegraf.Accumulator, chai
 		return fmt.Errorf("getting blocks notify source: %v", err)
 	}
 
-	msgCh, err := l.api.MpoolSub(ctx) // closed with consumer
-	if err != nil {
-		return fmt.Errorf("getting mpool notify source: %v", err)
-	}
 	// process new tipsets
 	go l.processTipSets(ctx, tipsetsCh, acc, die)
 
 	// process new headers
 	go l.processBlockHeaders(ctx, headCh, acc, die)
-
-	// process new messages
-	go l.processMpoolUpdates(ctx, msgCh, acc, die)
 
 	return nil
 }
@@ -191,18 +177,12 @@ func (l *lotus) run(ctx context.Context, acc telegraf.Accumulator, warnErrors ch
 		return fmt.Errorf("Getting latest chainhead: %w", err)
 	}
 
-	// record info about pending messages
-	if err := l.recordMpoolPendingPoints(ctx, acc, chainHead, time.Now()); err != nil {
-		return fmt.Errorf("Recording pending mpool msgs: %w", err)
-	}
-	l.Log.Debug("Recorded pending mpool messages")
-
 	// This derived context allows us to notify workers to terminate when this function exits
 	cctx, closeRpcChans := context.WithCancel(ctx)
 	defer closeRpcChans()
 
 	// A worker sends on workerDie to signal that it has failed
-	workerDie := make(chan struct{}, 3)
+	workerDie := make(chan struct{}, 2)
 
 	if err := l.startWorkers(cctx, acc, chainHead, workerDie); err != nil {
 		return fmt.Errorf("Run workers: %v", err)
@@ -287,7 +267,7 @@ func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumula
 		return err
 	}
 
-	acc.AddFields("lotus_info",
+	acc.AddFields("observed_info",
 		map[string]interface{}{
 			"nothing": 0,
 		},
@@ -300,35 +280,6 @@ func (l *lotus) recordLotusInfoPoints(ctx context.Context, acc telegraf.Accumula
 		})
 
 	return nil
-}
-
-func (l *lotus) recordMpoolPendingPoints(ctx context.Context, acc telegraf.Accumulator, chainHead *types.TipSet, receivedAt time.Time) error {
-	pendingMsgs, err := l.api.MpoolPending(ctx, chainHead.Key())
-	if err != nil {
-		return err
-	}
-
-	for _, m := range pendingMsgs {
-		if err := recordMpoolUpdatePoints(ctx, acc, api.MpoolUpdate{Type: MpoolBootstrap, Message: m}, receivedAt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *lotus) processMpoolUpdates(ctx context.Context, msgCh <-chan api.MpoolUpdate, acc telegraf.Accumulator, die chan struct{}) {
-	for {
-		select {
-		case mpu, ok := <-msgCh:
-			if !ok {
-				die <- struct{}{}
-				return
-			}
-			go l.processMpoolUpdate(ctx, acc, mpu, time.Now())
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 func (l *lotus) processBlockHeaders(ctx context.Context, headCh <-chan *types.BlockHeader, acc telegraf.Accumulator, die chan struct{}) {
@@ -388,59 +339,22 @@ func (l *lotus) processHeader(ctx context.Context, acc telegraf.Accumulator, new
 	l.Log.Debugf("Recorded block header (h: %d)", newHeader.Height)
 }
 
-func (l *lotus) processMpoolUpdate(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) {
-	if err := recordMpoolUpdatePoints(ctx, acc, newMpoolUpdate, receivedAt); err != nil {
-		err = fmt.Errorf("Recording mpool update (cid: %s, type: %d): %v", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type, err)
-		acc.AddError(err)
-		l.Log.Warn(err.Error())
-		return
-	}
-	l.Log.Debugf("Recorded mpool update (cid: %s, type: %s)", newMpoolUpdate.Message.Cid().String(), newMpoolUpdate.Type)
-}
-
 func recordBlockHeaderPoints(ctx context.Context, acc telegraf.Accumulator, newHeader *types.BlockHeader, receivedAt time.Time) error {
-	bs, err := newHeader.Serialize()
-	if err != nil {
-		return err
+	var parentBlocks = ""
+	for _, cid := range newHeader.Parents {
+		parentBlocks += cid.String() + ","
 	}
-	acc.AddFields("chain_block",
+	acc.AddFields("observed_headers",
 		map[string]interface{}{
 			"tipset_height":    newHeader.Height,
-			"election":         1,
-			"header_size":      len(bs),
-			"header_timestamp": time.Unix(int64(newHeader.Timestamp), 0).UnixNano(),
-			"recorded_at":      receivedAt.UnixNano(),
+			"header_timestamp": time.Unix(int64(newHeader.Timestamp), 0).Unix(),
 		},
 		map[string]string{
-			"header_cid_tag":    newHeader.Cid().String(),
-			"tipset_height_tag": strconv.Itoa(int(newHeader.Height)),
-			"miner_tag":         newHeader.Miner.String(),
-		},
-		receivedAt)
-	return nil
-}
-
-func recordMpoolUpdatePoints(ctx context.Context, acc telegraf.Accumulator, newMpoolUpdate api.MpoolUpdate, receivedAt time.Time) error {
-	var updateType string
-	switch newMpoolUpdate.Type {
-	case MpoolAdd:
-		updateType = "add"
-	case MpoolRemove:
-		updateType = "rm"
-	case MpoolBootstrap:
-		updateType = "init"
-	default:
-		return fmt.Errorf("unknown mpool update type: %v", newMpoolUpdate.Type)
-	}
-
-	acc.AddFields("chain_mpool",
-		map[string]interface{}{
-			"message_size": newMpoolUpdate.Message.Size(),
-			"recorded_at":  receivedAt.UnixNano(),
-		},
-		map[string]string{
-			"message_cid_tag":       newMpoolUpdate.Message.Cid().String(),
-			"mpool_update_type_tag": updateType,
+			"header_cid":        newHeader.Cid().String(),
+			"miner_id":          newHeader.Miner.String(),
+			"parent_state_root": newHeader.ParentStateRoot.String(),
+			"parent_weight":     newHeader.ParentWeight.String(),
+			"parents":           parentBlocks,
 		},
 		receivedAt)
 	return nil
@@ -453,13 +367,15 @@ func recordTipsetMessagesPoints(ctx context.Context, acc telegraf.Accumulator, t
 		return fmt.Errorf("no cids in tipset")
 	}
 
-	acc.AddFields("chain_tipset",
+	acc.AddFields("observed_tipsets",
 		map[string]interface{}{
-			"recorded_at":   receivedAt.UnixNano(),
 			"tipset_height": int(tipset.Height()),
 			"block_count":   len(cids),
+			"recorded_at":   receivedAt.UnixNano(),
 		},
-		map[string]string{}, ts)
+		map[string]string{
+			"tipset_key": tipset.Key().String(),
+		}, ts)
 
 	return nil
 }
