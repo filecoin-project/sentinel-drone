@@ -243,11 +243,11 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		}
 	}(ctx, warnErr)
 
-	// Gather metrics until the context is cancelled, restarting if fatal error encountered
+	// Gather metrics until the context is cancelled, Failing if fatal error encountered
 	go func(ctx context.Context, warnErrCh chan error, acc telegraf.Accumulator) {
 		for {
 			if err := l.run(ctx, acc, warnErrCh); err != nil {
-				l.Log.Errorf("Service ended fatally: %v", err)
+				l.Log.Fatalf("Service ended fatally: %v", err)
 			}
 
 			select {
