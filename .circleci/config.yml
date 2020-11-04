@@ -78,18 +78,14 @@ workflows:
       - docker-build:
           filters:
             branches:
-              only:
-                - master
-                - main
-                - /.*-master$/
+              ignore: /.*/
+            tags:
+              only: /^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)*/  # incl v0.0.0 or v0.0.0-rc0
       - docker-push:
           requires:
             - docker-build
           filters:
             branches:
-              only:
-                - master
-                - main
-                - /^[a-z]*-master$/
+              ignore: /.*/
             tags:
-              only: /^v[0-9].*/
+              only: /^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)*/  # incl v0.0.0 or v0.0.0-rc0
