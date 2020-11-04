@@ -184,3 +184,7 @@ ci-1.13:
 ci-1.12:
 	docker build -t quay.io/influxdb/telegraf-ci:1.12.17 - < scripts/ci-1.12.docker
 	docker push quay.io/influxdb/telegraf-ci:1.12.17
+
+.PHONY: changelog
+changelog:
+	git-chglog -o CHANGELOG.md
