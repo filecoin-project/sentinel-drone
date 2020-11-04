@@ -247,6 +247,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 	go func(ctx context.Context, warnErrCh chan error, acc telegraf.Accumulator) {
 		for {
 			if err := l.run(ctx, acc, warnErrCh); err != nil {
+				l.Stop()
 				l.Log.Fatalf("Service ended fatally: %v", err)
 			}
 
