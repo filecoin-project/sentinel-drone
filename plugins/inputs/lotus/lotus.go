@@ -3,6 +3,7 @@ package lotus
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -248,7 +249,7 @@ func (l *lotus) Start(acc telegraf.Accumulator) error {
 		for {
 			if err := l.run(ctx, acc, warnErrCh); err != nil {
 				l.Stop()
-				l.Log.Fatalf("Service ended fatally: %v", err)
+				os.Exit(1)
 			}
 
 			select {
