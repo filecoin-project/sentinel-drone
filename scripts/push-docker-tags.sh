@@ -42,7 +42,7 @@ DRY_RUN=${5:-false}
 DATE_SHORT=$(date -u +%F)
 
 pushTag () {
-  local IMAGE_TAG=$1
+  local IMAGE_TAG="${1/\//-}"
   if [ "$DRY_RUN" != false ]; then
     echo "DRY RUN!"
     echo docker tag "$IMAGE_NAME" "$IMAGE_NAME:$IMAGE_TAG"
@@ -54,5 +54,8 @@ pushTag () {
   fi
 }
 
-pushTag "$GIT_BRANCH-${DATE_SHORT}-${GIT_SHA1_SHORT}"
-pushTag "$GIT_BRANCH-latest"
+if [ -z "$GIT_TAG" ]; then
+	pushTag "$GIT_BRANCH-${DATE_SHORT}-${GIT_SHA1_SHORT}"
+else
+	pushTag "$GIT_TAG"
+fi

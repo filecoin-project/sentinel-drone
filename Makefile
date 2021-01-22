@@ -147,6 +147,10 @@ package-nightly:
 	./scripts/build.py --nightly --package --platform=all --arch=all \
 		--upload --bucket=dl.influxdata.com/telegraf/nightlies
 
+.PHONY: changelog
+changelog:
+	go run github.com/git-chglog/git-chglog/cmd/git-chglog -o CHANGELOG.md
+
 .PHONY: clean
 clean:
 	rm -f telegraf
